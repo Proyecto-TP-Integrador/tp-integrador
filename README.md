@@ -22,7 +22,7 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 | 1. Build & Package | Hadolint, Docker Buildx | Valida el Dockerfile y compila la imagen inmutable del backend |
 | 2. Auditorías | Checkov, kube-linter, OWASP ZAP, Threagile, Semgrep, Trivy, Gitleaks | IaC sobre el manifiesto renderizado (Render First), DAST, modelado de amenazas, SAST, SCA y secretos |
 | 3. Vulnerability Management | OWASP DefectDojo (API v2) | Centraliza y deduplica los hallazgos (runner self-hosted) |
-| 4. Release & Deploy | Docker Hub, Helm | Publica la imagen y despliega en Kubernetes |
+| 4. Release & Deploy | Docker Hub, Syft, Cosign, Helm | Publica la imagen por digest, genera el SBOM, la firma, verifica la firma y despliega en Kubernetes |
 
 ## Gobernanza
 

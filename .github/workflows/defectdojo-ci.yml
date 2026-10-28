@@ -278,6 +278,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-package, security-audits, defectdojo-import]
     if: github.ref == 'refs/heads/main'
+    # SS-03: id-token permite a Cosign firmar con la identidad OIDC del workflow (keyless)
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout del código
         uses: actions/checkout@v5
@@ -298,11 +302,45 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Etiquetar y Push a Docker Hub
+      - name: Push a Docker Hub (tag inmutable por SHA)
+        id: push
         run: |
-          docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
-          docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
-          docker push ${{ env.DOCKER_IMAGE }}:latest
+          docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }} | tee push.log
+          DIGEST=$(grep -oE 'digest: sha256:[a-f0-9]{64}' push.log | awk '{print $2}' | tail -1)
+          test -n "$DIGEST"
+          echo "image=${{ env.DOCKER_IMAGE }}@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Imagen publicada: ${{ env.DOCKER_IMAGE }}@$DIGEST"
+
+      - name: "SS-03: Instalar Cosign"
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: "SS-03: Generar SBOM con Syft (SPDX)"
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.push.outputs.image }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom-notes-backend.spdx.json
+          upload-release-assets: false
+
+      - name: "SS-03: Firmar la imagen y adjuntar el SBOM (Cosign keyless)"
+        run: |
+          cosign sign --yes ${{ steps.push.outputs.image }}
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json ${{ steps.push.outputs.image }}
+
+      - name: "Andon Cord: verificar firma y SBOM antes del despliegue"
+        run: |
+          ID='^https://github.com/${{ github.repository }}/.github/workflows/defectdojo-ci.yml@refs/heads/main$'
+          ISSUER='https://token.actions.githubusercontent.com'
+          cosign verify ${{ steps.push.outputs.image }} \
+            --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
+          cosign verify-attestation --type spdxjson ${{ steps.push.outputs.image }} \
+            --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
+          echo "Firma y SBOM verificados en el log público de transparencia: ${{ steps.push.outputs.image }}"
 
       - name: Despliegue con Helm en Kubernetes
         run: |
