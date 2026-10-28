@@ -1,0 +1,30 @@
+name: "Hardening de Infraestructura y Seguridad"
+description: "Requerimiento de refactorización técnica alineado al estándar OWASP ASVS v5.0.0"
+title: "[SEC-HARDENING]: "
+labels: ["security", "asvs-v5", "hardening", "devsecops"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: "### Registro Oficial de Refactorización de Seguridad"
+  - type: textarea
+    id: problem-description
+    attributes:
+      label: "Descripción de la Brecha / Vulnerabilidad Registrada"
+      placeholder: "Detalle la falla identificada post-TP18 (ej. Ejecución de contenedor como usuario root)."
+    validations:
+      required: true
+  - type: input
+    id: asvs-ref
+    attributes:
+      label: "Referencia OWASP ASVS v5.0.0"
+      placeholder: "Ej: V5.2.1 - Rootless Container Runtime Execution"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Criterios de Aceptación (Formato Gherkin)"
+      placeholder: "Given... When... Then..."
+    validations:
+      required: true

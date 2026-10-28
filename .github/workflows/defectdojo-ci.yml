@@ -1,0 +1,282 @@
+name: CI/CD Pipeline - Notes App DevSecOps (4 Fases)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Mínimo privilegio para el GITHUB_TOKEN
+permissions:
+  contents: read
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-portfolio
+  HELM_RELEASE_NAME: mi-app
+  K8S_NAMESPACE: devops-portfolio
+  # Rutas de la estructura del PIF
+  BACKEND_DIR: app/backend
+  CHART_DIR: helm/notes-app
+  VALUES_PROD: helm/values-prod.yaml
+  GITLEAKS_VERSION: 8.18.2
+
+jobs:
+  # =========================================================================
+  # FASE 1: BUILD & PACKAGE (Construcción de Imagen Inmutable)
+  # =========================================================================
+  build-and-package:
+    name: "Fase 1: Build & Package (Imagen Inmutable)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v5
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compilar imagen Docker
+        run: |
+          docker build -t ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ./${{ env.BACKEND_DIR }}
+
+      - name: Exportar imagen a tarball efímero
+        run: |
+          mkdir -p build-artifacts
+          docker save ${{ env.DOCKER_IMAGE }}:${{ github.sha }} -o build-artifacts/app-image.tar
+
+      - name: Publicar Artefacto de Imagen
+        uses: actions/upload-artifact@v5
+        with:
+          name: docker-image-artifact
+          path: build-artifacts/app-image.tar
+          retention-days: 1
+
+  # =========================================================================
+  # FASE 2: AUDITORÍAS DE CIBERSEGURIDAD Y GENERACIÓN DE REPORTES
+  # =========================================================================
+  security-audits:
+    name: "Fase 2: Auditorías (ZAP, Threagile, Semgrep, Trivy & Gitleaks)"
+    runs-on: ubuntu-latest
+    needs: [build-and-package]
+    steps:
+      - name: Checkout del código (Historial completo para Gitleaks)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Crear carpeta para reportes
+        run: |
+          mkdir -p reports-json
+          # v2: ZAP corre con el usuario zap (uid 1000) y el runner con uid 1001
+          chmod a+w reports-json
+
+      - name: Descargar Artefacto de Imagen
+        uses: actions/download-artifact@v5
+        with:
+          name: docker-image-artifact
+          path: build-artifacts
+
+      - name: Cargar imagen Docker compilada
+        run: |
+          docker load -i build-artifacts/app-image.tar
+
+      - name: Instalar Helm CLI
+        uses: azure/setup-helm@v5
+        with:
+          version: 'v3.13.0'
+
+      - name: Renderizar Helm Chart (Render First)
+        run: |
+          helm template ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
+            -f ${{ env.VALUES_PROD }} > manifests-rendered-prod.yaml
+          test -s manifests-rendered-prod.yaml
+
+      # -------------------------------------------------------------
+      # 2A. OWASP ZAP DAST
+      # -------------------------------------------------------------
+      - name: Levantar Notes App efímera para DAST
+        run: |
+          docker network create zapnet
+          docker run -d --name db --network zapnet \
+            -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=notesdb postgres:16-alpine
+          docker run -d --name notes-backend --network zapnet -p 5000:5000 \
+            -e DB_HOST=db ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          timeout 120 bash -c 'until curl -sf http://localhost:5000/health | grep -q connected; do sleep 3; done'
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"title":"PIF","content":"seed para ZAP"}' http://localhost:5000/api/notes
+
+      - name: Ejecutar OWASP ZAP Baseline (reporte XML)
+        run: |
+          # v2: el parser "ZAP Scan" de DefectDojo solo acepta XML
+          docker run --rm --network zapnet -v "$PWD/reports-json":/zap/wrk:rw \
+            zaproxy/zap-stable zap-baseline.py -t http://notes-backend:5000/api/notes -x zap-report.xml -I
+          test -s reports-json/zap-report.xml
+
+      # -------------------------------------------------------------
+      # 2B. THREAGILE THREAT MODELING
+      # -------------------------------------------------------------
+      - name: Ejecutar Threagile Threat Model Analysis
+        uses: threagile/run-threagile-action@v1
+        continue-on-error: true
+        with:
+          # v2: la action solo acepta model-file; la salida va a threagile/output/
+          model-file: 'threat-model/threagile.yaml'
+
+      - name: Copiar risks.json de Threagile
+        run: |
+          # v2: el archivo real es risks.json (no threagile-results.json)
+          if [ -s threagile/output/risks.json ]; then
+            cp threagile/output/risks.json reports-json/threagile-risks.json
+          else
+            echo "::warning::Threagile no generó risks.json"
+          fi
+
+      # -------------------------------------------------------------
+      # 2C. SEMGREP SAST
+      # -------------------------------------------------------------
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ejecutar Semgrep SAST
+        run: |
+          python3 -m pip install semgrep
+          mkdir -p .semgrep-tmp
+          cp manifests-rendered-prod.yaml .semgrep-tmp/helm-rendered.yaml
+          # v2: p/owasp-top-ten (p/owasp-top-10 no existe en el registry de Semgrep)
+          semgrep scan --config=p/owasp-top-ten --config=p/python --config=p/dockerfile --config=p/kubernetes \
+            --no-git-ignore --json --output=reports-json/semgrep-results.json \
+            app .semgrep-tmp || true
+
+      # -------------------------------------------------------------
+      # 2D. TRIVY CONTAINER, SCA E IaC
+      # -------------------------------------------------------------
+      - name: Ejecutar Trivy Container Scan
+        # v2: versión fijada por SHA (v0.36.0) en lugar de @master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: '${{ env.DOCKER_IMAGE }}:${{ github.sha }}'
+          format: 'json'
+          output: 'reports-json/trivy-container-results.json'
+          exit-code: '0'
+
+      - name: Ejecutar Trivy SCA (dependencias PyPI)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: 'fs'
+          scan-ref: '${{ env.BACKEND_DIR }}'
+          scanners: 'vuln'
+          format: 'json'
+          output: 'reports-json/trivy-sca-results.json'
+          exit-code: '0'
+
+      - name: Ejecutar Trivy IaC sobre YAML Renderizado
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: 'config'
+          scan-ref: 'manifests-rendered-prod.yaml'
+          format: 'json'
+          output: 'reports-json/trivy-iac-results.json'
+          exit-code: '0'
+
+      # -------------------------------------------------------------
+      # 2E. GITLEAKS SECRET SCANNING
+      # -------------------------------------------------------------
+      - name: Ejecutar Gitleaks CLI
+        run: |
+          GL_URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          wget -q "${GL_URL}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          # v2: --redact para no publicar secretos en texto plano dentro del artifact
+          gitleaks detect --source . --redact --report-format json \
+            --report-path reports-json/gitleaks-report.json || true
+
+      - name: Publicar Artefacto de Reportes
+        uses: actions/upload-artifact@v5
+        with:
+          name: security-json-reports
+          path: reports-json/
+          retention-days: 1
+
+  # =========================================================================
+  # FASE 3: CENTRALIZACIÓN Y DEDUPLICACIÓN EN OWASP DEFECTDOJO
+  # =========================================================================
+  defectdojo-import:
+    name: "Fase 3: Centralización en DefectDojo (Vulnerability Management)"
+    # v2: runner self-hosted en la VM de DefectDojo (ubuntu-latest no alcanza localhost:8080)
+    runs-on: [self-hosted, pif]
+    needs: [security-audits]
+    # v2: nunca en pull_request (repo público + runner self-hosted); needs exige Fase 2 exitosa
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout del código (script de importación)
+        uses: actions/checkout@v5
+
+      - name: Descargar Reportes
+        uses: actions/download-artifact@v5
+        with:
+          name: security-json-reports
+          path: reports-json
+
+      # v2: la action defectdojo/import-scan-action@v1 no existe; se reutiliza el script validado localmente
+      - name: Importar reportes a DefectDojo (API v2)
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          ENGAGEMENT_NAME: CI/CD Automated Security Audits
+          REPORTS_DIR: reports-json
+        run: |
+          bash scripts/verificar-defectdojo.sh | tee import.log
+
+      - name: Resumen de Centralización en GitHub
+        if: always()
+        run: |
+          {
+            echo "### Centralización de Vulnerabilidades en DefectDojo :shield:"
+            echo "Commit \`${{ github.sha }}\` importado en **CI/CD Automated Security Audits**."
+            echo '```text'
+            grep -E '\[(OK|FAIL|WARN)\]|Verificación completada' import.log || echo "Sin salida del script"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # =========================================================================
+  # FASE 4: RELEASE & DEPLOY (Publicación y Despliegue Post-Aprobación)
+  # =========================================================================
+  deploy-k8s-helm:
+    name: "Fase 4: Release & Deploy Helm K8s"
+    runs-on: ubuntu-latest
+    needs: [build-and-package, security-audits, defectdojo-import]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v5
+
+      - name: Descargar Artefacto de Imagen
+        uses: actions/download-artifact@v5
+        with:
+          name: docker-image-artifact
+          path: build-artifacts
+
+      - name: Cargar imagen Docker probada
+        run: |
+          docker load -i build-artifacts/app-image.tar
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Etiquetar y Push a Docker Hub
+        run: |
+          docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
+          docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Despliegue con Helm en Kubernetes
+        run: |
+          echo "Desplegando Helm Chart en Kubernetes..."
+          # helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
+          #   -n ${{ env.K8S_NAMESPACE }}
