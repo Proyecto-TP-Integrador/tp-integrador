@@ -1,0 +1,14 @@
+apiVersion: v2
+name: devops-portfolio
+description: Notes App — Proyecto Final Integrador DevSecOps
+type: application
+version: 0.1.0          # versión del chart
+appVersion: "1.0.0"     # versión de la app que despliega
+keywords:
+  - devops
+  - portfolio
+  - flask
+  - postgres
+maintainers:
+  - name: DevOps-Operaciones1
+    email: tu@email.com
