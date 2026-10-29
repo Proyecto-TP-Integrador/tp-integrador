@@ -1,0 +1,10 @@
+# Configuración de Checkov para el manifiesto renderizado (Render First).
+# Cada excepción está justificada en docs/riesgos-aceptados.md.
+skip-download: true   # no consulta la API de Prisma Cloud
+framework:
+  - kubernetes
+skip-check:
+  - CKV_K8S_43   # RA-01: imágenes fijadas por digest
+  - CKV_K8S_40   # RA-02: UID alto en frontend (101) y PostgreSQL (70)
+  - CKV_K8S_35   # RA-03: secretos como variables de entorno
+  - CKV2_K8S_6   # RA-04: NetworkPolicy

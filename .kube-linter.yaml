@@ -1,0 +1,6 @@
+# Configuración de kube-linter para el manifiesto renderizado (Render First).
+# Cada excepción está justificada en docs/riesgos-aceptados.md.
+checks:
+  addAllBuiltIn: false
+  exclude:
+    - no-anti-affinity   # RA-05: anti-afinidad entre réplicas

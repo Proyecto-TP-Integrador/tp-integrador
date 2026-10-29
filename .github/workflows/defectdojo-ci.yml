@@ -92,8 +92,22 @@ jobs:
       - name: Renderizar Helm Chart (Render First)
         run: |
           helm template ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
-            -f ${{ env.VALUES_PROD }} > manifests-rendered-prod.yaml
+            -f ${{ env.VALUES_PROD }} \
+            --set backend.image.repository=${{ env.DOCKER_IMAGE }} \
+            --set backend.image.tag=${{ github.sha }} > manifests-rendered-prod.yaml
           test -s manifests-rendered-prod.yaml
+
+      - name: "Andon Cord: Checkov sobre el manifiesto renderizado"
+        run: |
+          pipx run --spec checkov==3.3.30 checkov -f manifests-rendered-prod.yaml \
+            --config-file .checkov.yaml --compact \
+            -o cli -o json --output-file-path console,reports-json/checkov-results.json
+
+      - name: "Andon Cord: kube-linter sobre el manifiesto renderizado"
+        run: |
+          curl -sSfL https://github.com/stackrox/kube-linter/releases/download/v0.8.3/kube-linter-linux.tar.gz \
+            | tar -xz -C /tmp kube-linter
+          /tmp/kube-linter lint manifests-rendered-prod.yaml --config .kube-linter.yaml
 
       # -------------------------------------------------------------
       # 2A. OWASP ZAP DAST
@@ -108,6 +122,17 @@ jobs:
           timeout 120 bash -c 'until curl -sf http://localhost:5000/health | grep -q connected; do sleep 3; done'
           curl -s -X POST -H "Content-Type: application/json" \
             -d '{"title":"PIF","content":"seed para ZAP"}' http://localhost:5000/api/notes
+
+      - name: "AS-02: el runtime bloquea la escalada de privilegios"
+        run: |
+          docker exec notes-backend id
+          if docker exec notes-backend sh -c 'touch /usr/bin/malware'; then
+            echo "::error::El contenedor permitió escribir en /usr/bin"; exit 1
+          fi
+          if docker exec notes-backend sh -c 'chmod +s /app/app.py'; then
+            echo "::error::El contenedor permitió activar el bit setuid"; exit 1
+          fi
+          echo "Escritura en el sistema de archivos y chmod +s bloqueados"
 
       - name: Ejecutar OWASP ZAP Baseline (reporte XML)
         run: |

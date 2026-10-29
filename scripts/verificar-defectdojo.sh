@@ -57,6 +57,7 @@ import_scan "Semgrep JSON Report"    "$REPORTS_DIR/semgrep-results.json"        
 import_scan "Trivy Scan"             "$REPORTS_DIR/trivy-container-results.json" "Trivy Container"
 import_scan "Trivy Scan"             "$REPORTS_DIR/trivy-sca-results.json"       "Trivy SCA"
 import_scan "Trivy Scan"             "$REPORTS_DIR/trivy-iac-results.json"       "Trivy IaC"
+import_scan "Checkov Scan"           "$REPORTS_DIR/checkov-results.json"         "Checkov IaC"
 import_scan "Gitleaks Scan"          "$REPORTS_DIR/gitleaks-report.json"         "Gitleaks Secret Scanning"
 
 echo ""
