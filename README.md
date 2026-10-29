@@ -19,7 +19,7 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 
 | Fase | Herramientas | Función |
 |------|--------------|---------|
-| 1. Build & Package | Docker Buildx | Compila la imagen inmutable del backend |
+| 1. Build & Package | Hadolint, Docker Buildx | Valida el Dockerfile y compila la imagen inmutable del backend |
 | 2. Auditorías | OWASP ZAP, Threagile, Semgrep, Trivy, Gitleaks | DAST, modelado de amenazas, SAST, SCA/IaC y secretos |
 | 3. Vulnerability Management | OWASP DefectDojo (API v2) | Centraliza y deduplica los hallazgos (runner self-hosted) |
 | 4. Release & Deploy | Docker Hub, Helm | Publica la imagen y despliega en Kubernetes |
