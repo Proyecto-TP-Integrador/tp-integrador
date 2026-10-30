@@ -1,6 +1,6 @@
 # Post-mortem PM-001: fallo del PR Check por dependencias de test
 
-> Las mediciones corresponden a las ejecuciones del repositorio de desarrollo [laudainotta/devops-PIF](https://github.com/laudainotta/devops-PIF), donde se integró cada cambio por Pull Request.
+> Las mediciones corresponden a las ejecuciones del repositorio de desarrollo [Proyecto-TP-Integrador/devops-PIF](https://github.com/Proyecto-TP-Integrador/devops-PIF), donde se integró cada cambio por Pull Request.
 
 Análisis con enfoque de Cultura Justa (blameless): se asume que cada decisión se tomó de la mejor manera posible con la información disponible, y la causa se busca en las salvaguardas del sistema que permitieron que el error avanzara.
 

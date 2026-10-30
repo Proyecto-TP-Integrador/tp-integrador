@@ -26,7 +26,7 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 
 ## Gobernanza
 
-El trabajo se gestionó en el tablero de GitHub Projects v2 [PIF DevSecOps - Notes App](https://github.com/users/laudainotta/projects/1), con jerarquía Épica, Feature, Historia (US/AS/SS), Task y Pull Request. Los Issues, los Pull Requests y la trazabilidad de cada cambio están en el repositorio de desarrollo [laudainotta/devops-PIF](https://github.com/laudainotta/devops-PIF); los scripts de `scripts/` que operan sobre el tablero apuntan a ese repositorio.
+El trabajo se gestionó en el tablero de GitHub Projects v2 [PIF DevSecOps - Notes App](https://github.com/orgs/Proyecto-TP-Integrador/projects/1), con jerarquía Épica, Feature, Historia (US/AS/SS), Task y Pull Request. Los Issues, los Pull Requests y la trazabilidad de cada cambio están en el repositorio de desarrollo [Proyecto-TP-Integrador/devops-PIF](https://github.com/Proyecto-TP-Integrador/devops-PIF); los scripts de `scripts/` que operan sobre el tablero apuntan a ese repositorio.
 
 ## Integrantes y etapas
 

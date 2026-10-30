@@ -2,7 +2,7 @@
 # Crea los Issues #1, #2 y #3 del PIF con el formato de la plantilla security_hardening.yml
 set -euo pipefail
 
-REPO="laudainotta/devops-PIF"
+REPO="Proyecto-TP-Integrador/devops-PIF"
 PROYECTO="PIF DevSecOps - Notes App"
 
 

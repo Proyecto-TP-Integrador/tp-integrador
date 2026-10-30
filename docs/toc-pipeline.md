@@ -1,6 +1,6 @@
 # Teoría de Restricciones aplicada al pipeline de CI/CD
 
-> Las mediciones corresponden a las ejecuciones del repositorio de desarrollo [laudainotta/devops-PIF](https://github.com/laudainotta/devops-PIF), donde se integró cada cambio por Pull Request.
+> Las mediciones corresponden a las ejecuciones del repositorio de desarrollo [Proyecto-TP-Integrador/devops-PIF](https://github.com/Proyecto-TP-Integrador/devops-PIF), donde se integró cada cambio por Pull Request.
 
 Aplicación de los 5 Pasos de Focalización de Goldratt sobre el pipeline `defectdojo-ci.yml`. Los tiempos provienen de las ejecuciones exitosas en `main` y se obtienen con `scripts/metricas-pipeline.sh`.
 

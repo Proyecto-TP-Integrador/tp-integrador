@@ -4,7 +4,7 @@
 # Toma las últimas ejecuciones exitosas en main y muestra la salida en formato de tabla Markdown.
 set -euo pipefail
 
-REPO="laudainotta/devops-PIF"
+REPO="Proyecto-TP-Integrador/devops-PIF"
 WF="defectdojo-ci.yml"
 CANT="${1:-6}"
 TMP=$(mktemp -d)

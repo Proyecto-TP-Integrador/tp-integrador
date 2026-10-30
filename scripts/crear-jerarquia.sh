@@ -3,8 +3,8 @@
 # y completa los campos Tipo, Story Points y Status del tablero. Es idempotente.
 set -euo pipefail
 
-REPO="laudainotta/devops-PIF"
-OWNER="laudainotta"
+REPO="Proyecto-TP-Integrador/devops-PIF"
+OWNER="Proyecto-TP-Integrador"
 PROJ=1
 
 numero_por_titulo() {
@@ -148,7 +148,7 @@ opcion_id() { echo "$FIELDS" | jq -r --arg n "$1" --arg o "$2" '.fields[] | sele
 item_id() {
   gh api graphql -F n="$1" -f query='
   query($n: Int!) {
-    repository(owner: "laudainotta", name: "devops-PIF") {
+    repository(owner: "Proyecto-TP-Integrador", name: "devops-PIF") {
       issue(number: $n) {
         projectItems(first: 5) { nodes { id project { number } } }
       }

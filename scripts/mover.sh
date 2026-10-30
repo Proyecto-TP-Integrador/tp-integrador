@@ -4,7 +4,7 @@
 set -euo pipefail
 
 PROJ=1
-OWNER="laudainotta"
+OWNER="Proyecto-TP-Integrador"
 WIP=2
 N="${1:?Falta el número de Issue}"
 DESTINO="${2:?Falta el Status destino}"
@@ -12,7 +12,7 @@ DESTINO="${2:?Falta el Status destino}"
 item_y_status() {
   gh api graphql -F n="$1" -f query='
   query($n: Int!) {
-    repository(owner: "laudainotta", name: "devops-PIF") {
+    repository(owner: "Proyecto-TP-Integrador", name: "devops-PIF") {
       issue(number: $n) {
         projectItems(first: 5) { nodes {
           id project { number }
