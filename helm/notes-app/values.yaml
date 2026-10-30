@@ -59,7 +59,7 @@ frontend:
     tag: "latest"
     pullPolicy: Always
   replicas: 2
-  port: 80
+  port: 8080
   resources:
     requests:
       memory: "64Mi"

@@ -118,6 +118,7 @@ jobs:
           docker run -d --name db --network zapnet \
             -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=notesdb postgres:16-alpine
           docker run -d --name notes-backend --network zapnet -p 5000:5000 \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
             -e DB_HOST=db ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           timeout 120 bash -c 'until curl -sf http://localhost:5000/health | grep -q connected; do sleep 3; done'
           curl -s -X POST -H "Content-Type: application/json" \
