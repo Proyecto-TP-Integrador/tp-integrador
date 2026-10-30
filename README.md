@@ -26,7 +26,15 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 
 ## Gobernanza
 
-El trabajo se gestiona en el tablero de GitHub Projects v2 [PIF DevSecOps - Notes App](https://github.com/users/laudainotta/projects/1), con jerarquía Épica, Feature, Historia (US/AS/SS), Task y Pull Request. Todo cambio entra a `main` por Pull Request vinculado a un Issue.
+El trabajo se gestionó en el tablero de GitHub Projects v2 [PIF DevSecOps - Notes App](https://github.com/users/laudainotta/projects/1), con jerarquía Épica, Feature, Historia (US/AS/SS), Task y Pull Request. Los Issues, los Pull Requests y la trazabilidad de cada cambio están en el repositorio de desarrollo [laudainotta/devops-PIF](https://github.com/laudainotta/devops-PIF); los scripts de `scripts/` que operan sobre el tablero apuntan a ese repositorio.
+
+## Integrantes y etapas
+
+| Etapa | Kary Parra (karyparrauni) | Lautaro Dainotta (laudainotta) | Leonardo Encarnacao (leoencarnacao-droid) |
+|-------|---------------------------|--------------------------------|-------------------------------------------|
+| DEV | Aplicación base | Chart de Helm y modelo de amenazas | Pipeline base y análisis de brechas ASVS |
+| SEC | Hadolint | Checkov, kube-linter y prueba AS-02 | Syft y Cosign |
+| OPS | Dockerfile rootless | securityContext y Nginx sin root | Correcciones de Checkov, riesgos aceptados y mejora continua |
 
 ## Uso local
 

@@ -8,16 +8,16 @@ Flujo aplicado: Código heredado TP18 → Auditoría vs ASVS v5.0.0 → Matriz d
 
 | ID | Hallazgo | Evidencia | Ref. guía | ASVS 5.0.0 | Severidad | Prioridad | Historia / Issue |
 |----|----------|-----------|-----------|------------|-----------|-----------|------------------|
-| H-01 | El contenedor corre con un UID implícito, conserva binarios con setuid/setgid y la imagen base no está fijada por digest | `app/backend/Dockerfile` | V5.2.1 | V13 Configuration / V15 Secure Coding and Architecture | Alta | P1 | AS-02 / Issue #1 |
-| H-02 | Los Deployments no definen `securityContext`: se permite escalar privilegios y el sistema de archivos raíz es escribible | `templates/backend.yaml`, `frontend.yaml`, `postgres.yaml` | V1.4.2 | V13 Configuration | Alta | P1 | AS-02 / Issue #2 |
-| H-03 | El YAML renderizado solo se analiza con Trivy IaC; no hay Checkov ni kube-linter | Fase 2 de `defectdojo-ci.yml` | V1.1.3 | V13 Configuration | Media | P1 | US-01 / Issue #3 |
-| H-04 | Ningún escaneo corta el pipeline: Trivy usa `exit-code: '0'`, Semgrep y Gitleaks terminan con `\|\| true`, Threagile tiene `continue-on-error` y ZAP corre con `-I` | Fase 2 de `defectdojo-ci.yml` | No aplica | Control de proceso (fuera del alcance directo de ASVS) | Alta | P1 | Issue Andon Cord |
-| H-05 | Contraseña de producción en texto plano dentro del repositorio | `helm/values-prod.yaml` | No aplica | V13 Configuration (gestión de secretos) | Alta | P2 | Issue |
-| H-06 | Credenciales por defecto `postgres/postgres` como valor de respaldo | `app/backend/entrypoint.sh` | No aplica | V13 Configuration | Media | P2 | Issue |
-| H-07 | La Fase 4 publica la imagen con el tag mutable `latest` | Fase 4 de `defectdojo-ci.yml` | No aplica | V15 Secure Coding and Architecture | Media | P2 | Issue |
-| H-08 | La imagen no tiene SBOM ni firma criptográfica | Pipeline completo | No aplica | V15 Secure Coding and Architecture (dependencias) | Media | P3 | SS-03 (pendiente de consulta) |
+| H-01 | El contenedor corre con un UID implícito, conserva binarios con setuid/setgid y la imagen base no está fijada por digest | `app/backend/Dockerfile` | V5.2.1 | V13 Configuration / V15 Secure Coding and Architecture | Alta | P1 | AS-02 / #1 (resuelto) |
+| H-02 | Los Deployments no definen `securityContext`: se permite escalar privilegios y el sistema de archivos raíz es escribible | `templates/backend.yaml`, `frontend.yaml`, `postgres.yaml` | V1.4.2 | V13 Configuration | Alta | P1 | AS-02 / #2 (resuelto) |
+| H-03 | El YAML renderizado solo se analiza con Trivy IaC; no hay Checkov ni kube-linter | Fase 2 de `defectdojo-ci.yml` | V1.1.3 | V13 Configuration | Media | P1 | US-01 / #3 (resuelto) |
+| H-04 | Ningún escaneo corta el pipeline: Trivy usa `exit-code: '0'`, Semgrep y Gitleaks terminan con `\|\| true`, Threagile tiene `continue-on-error` y ZAP corre con `-I` | Fase 2 de `defectdojo-ci.yml` | No aplica | Control de proceso (fuera del alcance directo de ASVS) | Alta | P1 | SS-04 / #23 (backlog). Parcial: Hadolint, Checkov, kube-linter, AS-02 y Cosign ya bloquean |
+| H-05 | Contraseña de producción en texto plano dentro del repositorio | `helm/values-prod.yaml` | No aplica | V13 Configuration (gestión de secretos) | Alta | P2 | SS-05 / #24 (backlog) |
+| H-06 | Credenciales por defecto `postgres/postgres` como valor de respaldo | `app/backend/entrypoint.sh` | No aplica | V13 Configuration | Media | P2 | SS-06 / #25 (backlog) |
+| H-07 | La Fase 4 publica la imagen con el tag mutable `latest` | Fase 4 de `defectdojo-ci.yml` | No aplica | V15 Secure Coding and Architecture | Media | P2 | #17 (resuelto) |
+| H-08 | La imagen no tiene SBOM ni firma criptográfica | Pipeline completo | No aplica | V15 Secure Coding and Architecture (dependencias) | Media | P3 | SS-03 / #17 (resuelto) |
 | H-09 | Semgrep y Threagile analizan una copia de la aplicación distinta de la que el pipeline compila y despliega | Fase 2 de `defectdojo-ci.yml` | No aplica | Control de proceso | Media | P2 | Resuelto en la reorganización de la estructura |
-| H-10 | Los hallazgos de Trivy Container no se deduplican en DefectDojo porque el hash incluye el tag SHA de la imagen | DefectDojo, TP18 | No aplica | Control de proceso | Baja | P3 | Issue |
+| H-10 | Los hallazgos de Trivy Container no se deduplican en DefectDojo porque el hash incluye el tag SHA de la imagen | DefectDojo, TP18 | No aplica | Control de proceso | Baja | P3 | SS-07 / #26 (backlog) |
 
 ## Criterio de priorización
 
@@ -33,3 +33,10 @@ Flujo aplicado: Código heredado TP18 → Auditoría vs ASVS v5.0.0 → Matriz d
 - Justificación: la trazabilidad a un estándar requiere que la referencia exista en la versión declarada.
 - Versión 2: mapear cada hallazgo al capítulo vigente de ASVS 5.0.0.
 - Cambio realizado: la matriz conserva el ID de la guía en "Ref. guía" y agrega el capítulo real en "ASVS 5.0.0".
+
+### D2. Quality gate de Checkov por severidad
+
+- Problema: la guía pide abortar el build ante hallazgos de severidad Alta o Crítica, pero Checkov sin una cuenta de Prisma Cloud no informa severidades: el campo `severity` de cada hallazgo queda vacío.
+- Justificación: sin severidades, un umbral del tipo `--hard-fail-on HIGH,CRITICAL` no bloquearía ningún hallazgo y el gate quedaría sin efecto.
+- Versión 2: gate binario: cualquier hallazgo de Checkov o kube-linter detiene el pipeline, salvo los riesgos aceptados y justificados.
+- Cambio realizado: `.checkov.yaml` y `.kube-linter.yaml` con la lista de excepciones, documentadas en `docs/riesgos-aceptados.md`.

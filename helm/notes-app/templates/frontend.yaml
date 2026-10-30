@@ -21,6 +21,7 @@ spec:
         app: frontend
         {{- include "devops-portfolio.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 101
@@ -39,6 +40,12 @@ spec:
               port: {{ .Values.frontend.port }}
             initialDelaySeconds: 5
             periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           securityContext:

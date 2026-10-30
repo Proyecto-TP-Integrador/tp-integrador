@@ -13,7 +13,7 @@ postgres:
   image:
     repository: postgres
     tag: "16-alpine"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   credentials:
     database: notesdb
     user: postgres
@@ -31,8 +31,8 @@ postgres:
 # ── Backend Flask ─────────────────────────────────────────
 backend:
   image:
-    repository: TU_USUARIO/devops-portfolio
-    tag: "latest"
+    repository: laudainotta/devops-portfolio
+    tag: "1.0.0"         # el pipeline lo reemplaza por el SHA del commit
     pullPolicy: Always
   replicas: 2
   port: 5000
@@ -55,8 +55,8 @@ backend:
 # ── Frontend Nginx ────────────────────────────────────────
 frontend:
   image:
-    repository: TU_USUARIO/devops-frontend
-    tag: "latest"
+    repository: laudainotta/devops-frontend
+    tag: "1.0.0"
     pullPolicy: Always
   replicas: 2
   port: 8080

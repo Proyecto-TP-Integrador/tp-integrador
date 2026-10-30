@@ -31,6 +31,7 @@ spec:
         app: postgres
         {{- include "devops-portfolio.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 70
