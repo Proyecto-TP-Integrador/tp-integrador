@@ -17,7 +17,7 @@ Flujo aplicado: Código heredado TP18 → Auditoría vs ASVS v5.0.0 → Matriz d
 | H-07 | La Fase 4 publica la imagen con el tag mutable `latest` | Fase 4 de `defectdojo-ci.yml` | No aplica | V15 Secure Coding and Architecture | Media | P2 | #17 (resuelto) |
 | H-08 | La imagen no tiene SBOM ni firma criptográfica | Pipeline completo | No aplica | V15 Secure Coding and Architecture (dependencias) | Media | P3 | SS-03 / #17 (resuelto) |
 | H-09 | Semgrep y Threagile analizan una copia de la aplicación distinta de la que el pipeline compila y despliega | Fase 2 de `defectdojo-ci.yml` | No aplica | Control de proceso | Media | P2 | Resuelto en la reorganización de la estructura |
-| H-10 | Los hallazgos de Trivy Container no se deduplican en DefectDojo porque el hash incluye el tag SHA de la imagen | DefectDojo, TP18 | No aplica | Control de proceso | Baja | P3 | SS-07 / #26 (backlog) |
+| H-10 | Los hallazgos de Trivy Container no se deduplican en DefectDojo porque el hash incluye el tag SHA de la imagen | DefectDojo, TP18 | No aplica | Control de proceso | Baja | P3 | SS-07 / #26. Resuelto: Trivy escanea la imagen con un nombre fijo y la importación usa close_old_findings por servicio |
 
 ## Criterio de priorización
 
