@@ -52,9 +52,36 @@ import_scan() {
   fi
 }
 
+# Al crear un hallazgo activo, DefectDojo limpia is_mitigated y false_p, así que
+# los estados mitigated y false-positive del risk_tracking de Threagile se pierden
+# en la importación (accepted sí se conserva). Se aplican después por la API,
+# buscando cada riesgo por su synthetic_id exacto en todo el producto.
+sync_threagile_status() {
+  local FILE="$1"
+  [ -s "$FILE" ] || return 0
+  jq -r '.[] | select(.risk_status=="mitigated" or .risk_status=="false-positive") | "\(.risk_status) \(.synthetic_id)"' "$FILE" |
+  while read -r STATUS SID; do
+    if [ "$STATUS" = "mitigated" ]; then
+      BODY='{"active":false,"is_mitigated":true}'
+    else
+      BODY='{"active":false,"false_p":true}'
+    fi
+    IDS=$(curl -s -G "$DEFECTDOJO_URL/api/v2/findings/" -H "Authorization: Token $API_KEY" \
+      --data-urlencode "product_name=$PRODUCT_NAME" --data-urlencode "unique_id_from_tool=$SID" \
+      --data-urlencode "limit=50" | jq -r --arg sid "$SID" '.results[] | select(.unique_id_from_tool==$sid) | .id')
+    [ -n "$IDS" ] || { echo "      [WARN] $SID no está en DefectDojo"; continue; }
+    for FID in $IDS; do
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$DEFECTDOJO_URL/api/v2/findings/$FID/" \
+        -H "Authorization: Token $API_KEY" -H "Content-Type: application/json" -d "$BODY")
+      echo "      [SYNC] $STATUS -> finding $FID (HTTP $CODE): $SID"
+    done
+  done
+}
+
 # v2: scan_type reales del código de DefectDojo 3.4 y un test por cada reporte
 import_scan "ZAP Scan"               "$REPORTS_DIR/zap-report.xml"               "OWASP ZAP DAST"
 import_scan "Threagile risks report" "$REPORTS_DIR/threagile-risks.json"         "Threagile Threat Model"
+sync_threagile_status "$REPORTS_DIR/threagile-risks.json"
 import_scan "Semgrep JSON Report"    "$REPORTS_DIR/semgrep-results.json"         "Semgrep SAST"
 import_scan "Trivy Scan"             "$REPORTS_DIR/trivy-container-results.json" "Trivy Container"
 import_scan "Trivy Scan"             "$REPORTS_DIR/trivy-sca-results.json"       "Trivy SCA"

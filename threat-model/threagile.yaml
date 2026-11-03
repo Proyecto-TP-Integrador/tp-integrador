@@ -604,3 +604,36 @@ risk_tracking:
     ticket: PIF-TM-04
     date: 2026-09-06
     checked_by: Equipo DevOps
+
+  cross-site-scripting@nginx:
+    status: mitigated
+    justification: >-
+      El frontend estático no inserta datos sin escapar: la función esc()
+      convierte el título y el contenido de cada nota en texto con
+      textContent antes de armar el HTML. Nginx sólo sirve archivos
+      estáticos y hace de proxy hacia la API.
+    ticket: PIF-TM-09
+    date: 2026-11-03
+    checked_by: Equipo DevOps
+
+  missing-hardening@postgres:
+    status: mitigated
+    justification: >-
+      El pod de PostgreSQL corre sin root (UID 70), con seccomp
+      RuntimeDefault, allowPrivilegeEscalation false, sistema de archivos
+      raíz de solo lectura, drop ALL de capabilities y directorios de
+      trabajo en emptyDir en memoria con tamaño limitado.
+    ticket: PIF-TM-10
+    date: 2026-11-03
+    checked_by: Equipo DevOps
+
+  missing-hardening@volumen-postgres:
+    status: accepted
+    justification: >-
+      El PVC usa el aprovisionador local-path de k3d, que no cifra los datos
+      en reposo. Se acepta en el laboratorio local: el volumen es
+      ReadWriteOnce, sólo lo monta el pod de PostgreSQL y fsGroup 70 limita
+      el acceso al usuario de la base. Ver RA-08.
+    ticket: PIF-TM-11
+    date: 2026-11-03
+    checked_by: Equipo DevOps
