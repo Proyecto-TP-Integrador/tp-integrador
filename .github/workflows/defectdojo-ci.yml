@@ -182,11 +182,16 @@ jobs:
       # -------------------------------------------------------------
       # 2D. TRIVY CONTAINER, SCA E IaC
       # -------------------------------------------------------------
+      # H-10: nombre fijo para que DefectDojo deduplique entre ejecuciones
+      # (con el tag SHA, el "Target" del reporte cambia en cada commit)
+      - name: Etiqueta fija para el escaneo de Trivy
+        run: docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} notes-backend:scan
+
       - name: Ejecutar Trivy Container Scan
         # v2: versión fijada por SHA (v0.36.0) en lugar de @master
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          image-ref: '${{ env.DOCKER_IMAGE }}:${{ github.sha }}'
+          image-ref: 'notes-backend:scan'
           format: 'json'
           output: 'reports-json/trivy-container-results.json'
           exit-code: '0'

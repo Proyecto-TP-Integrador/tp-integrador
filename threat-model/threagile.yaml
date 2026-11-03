@@ -546,6 +546,55 @@ risk_tracking:
     date: 2026-09-06
     checked_by: Equipo DevOps
 
+  sql-nosql-injection@backend@postgres@backend>conexion-base-datos:
+    status: mitigated
+    justification: >-
+      Todas las consultas de app.py usan parámetros de psycopg2 (%s) y ninguna
+      concatena texto ingresado por el usuario. Semgrep SAST lo verifica en
+      cada ejecución del pipeline.
+    ticket: PIF-TM-04
+    date: 2026-11-03
+    checked_by: Equipo DevSecOps
+
+  path-traversal@postgres@volumen-postgres@postgres>escritura-volumen:
+    status: false-positive
+    justification: >-
+      PostgreSQL escribe solo en su directorio de datos (PGDATA) y no recibe
+      rutas de archivo desde la aplicación ni desde los usuarios.
+    ticket: PIF-TM-05
+    date: 2026-11-03
+    checked_by: Equipo DevSecOps
+
+  cross-site-scripting@kubernetes-api-server:
+    status: false-positive
+    justification: >-
+      La API de Kubernetes no presenta contenido de usuarios en un navegador;
+      no se expone fuera del clúster local y solo la consumen kubectl, Helm y
+      los controladores.
+    ticket: PIF-TM-06
+    date: 2026-11-03
+    checked_by: Equipo DevSecOps
+
+  missing-hardening@github-actions-pipeline:
+    status: mitigated
+    justification: >-
+      Actions de terceros fijadas por SHA, permisos mínimos del GITHUB_TOKEN,
+      quality gates bloqueantes (Hadolint, Checkov, kube-linter, AS-02 y
+      Cosign) y runner self-hosted efímero dentro del clúster (ARC).
+    ticket: PIF-TM-07
+    date: 2026-11-03
+    checked_by: Equipo DevSecOps
+
+  missing-authentication@ingress-controller>routing-backend@ingress-controller@backend:
+    status: accepted
+    justification: >-
+      La Notes App no tiene usuarios por diseño y la API no maneja datos
+      personales. La autenticación queda fuera del alcance del PIF (riesgo
+      aceptado RA-07); el Ingress solo se publica en el clúster local.
+    ticket: PIF-TM-08
+    date: 2026-11-03
+    checked_by: Equipo DevSecOps
+
   missing-vault@kubernetes-api-server:
     status: accepted
     justification: >-

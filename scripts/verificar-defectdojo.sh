@@ -39,6 +39,8 @@ import_scan() {
     -F "auto_create_context=true" \
     -F "scan_type=$SCAN_TYPE" \
     -F "test_title=$TEST_TITLE" \
+    -F "service=$TEST_TITLE" \
+    -F "close_old_findings=true" \
     -F "file=@$FILE_PATH")
   # v2: el éxito se valida por HTTP 201, no por la palabra "scan_type" en la respuesta
   if [ "$HTTP_CODE" = "201" ]; then

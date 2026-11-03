@@ -9,3 +9,12 @@ Hallazgos de Checkov y kube-linter sobre el manifiesto renderizado que no se cor
 | RA-03 | CKV_K8S_35: secretos como archivos | backend, postgres | La aplicación lee las credenciales de variables de entorno; montarlas como archivos requiere cambiar el código. | Las credenciales viven en un Secret de Kubernetes y no en el repositorio de la imagen. |
 | RA-04 | CKV2_K8S_6: Pods sin NetworkPolicy | backend, frontend, postgres | El laboratorio corre en un clúster local de un solo nodo; definir políticas de red queda fuera del alcance de esta entrega. | Services de tipo ClusterIP: PostgreSQL y el backend no se exponen fuera del clúster. |
 | RA-05 | kube-linter no-anti-affinity | backend, frontend | El laboratorio usa un único nodo, donde la anti-afinidad entre réplicas no tiene efecto. | Réplicas múltiples y estrategia RollingUpdate con maxUnavailable 0. |
+
+## Riesgos aceptados para el Security Gate
+
+El Security Gate no despliega si hay hallazgos CRITICAL o HIGH abiertos en DefectDojo (Anexo A §7). Los siguientes se aceptan de forma temporal y quedan registrados en DefectDojo o en el modelo de amenazas, con vencimiento o revisión.
+
+| ID | Hallazgo | Justificación | Control compensatorio | Registro |
+|----|----------|---------------|-----------------------|----------|
+| RA-06 | CVE HIGH de paquetes de Debian de la imagen base (util-linux, mount, login, ncurses, perl, systemd, sqlite) sin versión corregida publicada | No existe parche: Trivy informa el campo de versión corregida vacío. Cuando Debian lo publique, Trivy lo informará y el hallazgo volverá a bloquear el despliegue hasta reconstruir la imagen. | Contenedor sin root (UID 10001), sin binarios setuid, sistema de archivos de solo lectura y sin capabilities: los binarios afectados no se pueden usar para escalar privilegios. | Aceptación de riesgo en DefectDojo con vencimiento a 30 días |
+| RA-07 | Threagile missing-authentication (ingress → backend) | La Notes App no tiene usuarios por diseño y no maneja datos personales; la autenticación queda fuera del alcance del PIF. | El Ingress solo se publica en el clúster local; la API no se expone a Internet. | risk_tracking PIF-TM-08 en `threat-model/threagile.yaml` |
