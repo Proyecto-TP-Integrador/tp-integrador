@@ -13,12 +13,16 @@ permissions:
 
 env:
   DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-portfolio
-  HELM_RELEASE_NAME: mi-app
+  FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-frontend
+  HELM_RELEASE_NAME: notes-app
   K8S_NAMESPACE: devops-portfolio
   # Rutas de la estructura del PIF
   BACKEND_DIR: app/backend
+  FRONTEND_DIR: app/frontend
   CHART_DIR: helm/notes-app
   VALUES_PROD: helm/values-prod.yaml
+  VALUES_DEV: helm/values-dev.yaml
+  INGRESS_HOST: devops-portfolio.local
   GITLEAKS_VERSION: 8.18.2
 
 jobs:
@@ -277,10 +281,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # =========================================================================
-  # FASE 4: RELEASE & DEPLOY (Publicación y Despliegue Post-Aprobación)
+  # FASE 4A: RELEASE (Publicación, firma y SBOM de las imágenes)
   # =========================================================================
   deploy-k8s-helm:
-    name: "Fase 4: Release & Deploy Helm K8s"
+    name: "Fase 4: Release (Docker Hub, Cosign & SBOM)"
     runs-on: ubuntu-latest
     needs: [build-and-package, security-audits, defectdojo-import]
     if: github.ref == 'refs/heads/main'
@@ -288,6 +292,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # Sólo se pasan los digests: un output que contenga el valor de un secreto
+    # (el usuario de Docker Hub forma parte del nombre de la imagen) se descarta
+    outputs:
+      backend_digest: ${{ steps.push.outputs.digest }}
+      frontend_digest: ${{ steps.push-frontend.outputs.digest }}
     steps:
       - name: Checkout del código
         uses: actions/checkout@v5
@@ -302,6 +311,22 @@ jobs:
         run: |
           docker load -i build-artifacts/app-image.tar
 
+      - name: "Andon Cord: Hadolint sobre el Dockerfile del frontend"
+        run: |
+          docker run --rm -i hadolint/hadolint:v2.12.0 hadolint --failure-threshold warning - < ${{ env.FRONTEND_DIR }}/Dockerfile
+
+      - name: Compilar imagen del frontend
+        run: |
+          docker build -t ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} ./${{ env.FRONTEND_DIR }}
+
+      - name: "Andon Cord: Trivy sobre la imagen del frontend"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: '${{ env.FRONTEND_IMAGE }}:${{ github.sha }}'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+
       - name: Login a Docker Hub
         uses: docker/login-action@v3
         with:
@@ -314,8 +339,19 @@ jobs:
           docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }} | tee push.log
           DIGEST=$(grep -oE 'digest: sha256:[a-f0-9]{64}' push.log | awk '{print $2}' | tail -1)
           test -n "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "image=${{ env.DOCKER_IMAGE }}@$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Imagen publicada: ${{ env.DOCKER_IMAGE }}@$DIGEST"
+
+      - name: Push del frontend a Docker Hub (tag inmutable por SHA)
+        id: push-frontend
+        run: |
+          docker push ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} | tee push-frontend.log
+          DIGEST=$(grep -oE 'digest: sha256:[a-f0-9]{64}' push-frontend.log | awk '{print $2}' | tail -1)
+          test -n "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.FRONTEND_IMAGE }}@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Imagen publicada: ${{ env.FRONTEND_IMAGE }}@$DIGEST"
 
       - name: "SS-03: Instalar Cosign"
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -333,23 +369,122 @@ jobs:
           artifact-name: sbom-notes-backend.spdx.json
           upload-release-assets: false
 
-      - name: "SS-03: Firmar la imagen y adjuntar el SBOM (Cosign keyless)"
+      - name: "SS-03: Generar SBOM del frontend con Syft (SPDX)"
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.push-frontend.outputs.image }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          format: spdx-json
+          output-file: sbom-frontend.spdx.json
+          artifact-name: sbom-notes-frontend.spdx.json
+          upload-release-assets: false
+
+      - name: "SS-03: Firmar las imágenes y adjuntar el SBOM (Cosign keyless)"
         run: |
           cosign sign --yes ${{ steps.push.outputs.image }}
           cosign attest --yes --type spdxjson --predicate sbom.spdx.json ${{ steps.push.outputs.image }}
+          cosign sign --yes ${{ steps.push-frontend.outputs.image }}
+          cosign attest --yes --type spdxjson --predicate sbom-frontend.spdx.json ${{ steps.push-frontend.outputs.image }}
 
       - name: "Andon Cord: verificar firma y SBOM antes del despliegue"
         run: |
           ID='^https://github.com/${{ github.repository }}/.github/workflows/defectdojo-ci.yml@refs/heads/main$'
           ISSUER='https://token.actions.githubusercontent.com'
-          cosign verify ${{ steps.push.outputs.image }} \
-            --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
-          cosign verify-attestation --type spdxjson ${{ steps.push.outputs.image }} \
-            --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
-          echo "Firma y SBOM verificados en el log público de transparencia: ${{ steps.push.outputs.image }}"
+          for IMG in ${{ steps.push.outputs.image }} ${{ steps.push-frontend.outputs.image }}; do
+            cosign verify "$IMG" \
+              --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
+            cosign verify-attestation --type spdxjson "$IMG" \
+              --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
+            echo "Firma y SBOM verificados en el log público de transparencia: $IMG"
+          done
 
+  # =========================================================================
+  # FASE 4B: SECURITY GATE Y DESPLIEGUE CON HELM EN EL CLÚSTER
+  # =========================================================================
+  # Corre en el runner de ARC dentro del clúster, con la ServiceAccount
+  # notes-deployer: permisos sólo sobre el namespace devops-portfolio.
+  helm-deploy:
+    name: "Fase 4: Security Gate & Deploy Helm (k3d)"
+    runs-on: [self-hosted, pif]
+    needs: [deploy-k8s-helm]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout del código (chart de Helm)
+        uses: actions/checkout@v5
+
+      # Anexo A §7: no se despliega con hallazgos CRITICAL o HIGH abiertos.
+      # Abiertos = activos, sin mitigar, sin aceptación de riesgo vigente,
+      # no falsos positivos y no duplicados.
+      - name: "Security Gate: hallazgos CRITICAL/HIGH abiertos en DefectDojo"
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          set -euo pipefail
+          Q="product_name=Notes%20App&active=true&is_mitigated=false&risk_accepted=false&false_p=false&duplicate=false&limit=100"
+          TOTAL=0
+          for S in Critical High; do
+            curl -sf -H "Authorization: Token $DEFECTDOJO_API_KEY" \
+              "$DEFECTDOJO_URL/api/v2/findings/?$Q&severity=$S" > "gate-$S.json"
+            N=$(jq .count "gate-$S.json")
+            echo "$S abiertos: $N"
+            jq -r '.results[] | "  - [\(.severity)] \(.service // "-"): \(.title)"' "gate-$S.json"
+            TOTAL=$((TOTAL + N))
+          done
+          {
+            echo "### Security Gate :lock:"
+            echo "Hallazgos CRITICAL/HIGH abiertos en DefectDojo: **$TOTAL**"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "::error::Security Gate: $TOTAL hallazgos CRITICAL/HIGH abiertos. Despliegue bloqueado."
+            exit 1
+          fi
+          echo "Security Gate aprobado: sin hallazgos CRITICAL/HIGH abiertos."
+
+      - name: Instalar Helm CLI
+        uses: azure/setup-helm@v5
+        with:
+          version: 'v3.13.0'
+
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.35.0'
+
+      # Imágenes por digest: el tag SHA es informativo, Kubernetes descarga
+      # exactamente el digest firmado y verificado en la Fase 4A
       - name: Despliegue con Helm en Kubernetes
         run: |
-          echo "Desplegando Helm Chart en Kubernetes..."
-          # helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
-          #   -n ${{ env.K8S_NAMESPACE }}
+          set -euo pipefail
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
+            -n ${{ env.K8S_NAMESPACE }} \
+            -f ${{ env.VALUES_DEV }} \
+            --set ingress.host=${{ env.INGRESS_HOST }} \
+            --set backend.image.repository=${{ env.DOCKER_IMAGE }} \
+            --set backend.image.tag=${{ github.sha }}@${{ needs.deploy-k8s-helm.outputs.backend_digest }} \
+            --set frontend.image.repository=${{ env.FRONTEND_IMAGE }} \
+            --set frontend.image.tag=${{ github.sha }}@${{ needs.deploy-k8s-helm.outputs.frontend_digest }} \
+            --atomic --wait --timeout 5m
+          helm history ${{ env.HELM_RELEASE_NAME }} -n ${{ env.K8S_NAMESPACE }} --max 3
+
+      - name: "Verificación: rollout, usuario sin privilegios y smoke test"
+        run: |
+          set -euo pipefail
+          NS=${{ env.K8S_NAMESPACE }}
+          kubectl -n $NS rollout status deploy/backend --timeout=120s
+          kubectl -n $NS rollout status deploy/frontend --timeout=120s
+          UID_APP=$(kubectl -n $NS exec deploy/backend -c backend -- id -u)
+          echo "UID del proceso del backend: $UID_APP"
+          test "$UID_APP" = "10001"
+          curl -sf "http://backend-service.$NS.svc:5000/health"; echo
+          curl -sf -o /dev/null -w "Frontend: HTTP %{http_code}\n" "http://frontend-service.$NS.svc/"
+          curl -sf -H "Host: ${{ env.INGRESS_HOST }}" -o /dev/null -w "Ingress /api/notes: HTTP %{http_code}\n" \
+            "http://ingress-nginx-controller.ingress-nginx.svc/api/notes"
+          {
+            echo "### Despliegue :rocket:"
+            echo "Release \`${{ env.HELM_RELEASE_NAME }}\` en \`$NS\` con el commit \`${{ github.sha }}\`."
+            echo '```text'
+            kubectl -n $NS get deploy -o custom-columns=DEPLOY:.metadata.name,READY:.status.readyReplicas,IMAGEN:.spec.template.spec.containers[0].image
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
