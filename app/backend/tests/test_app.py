@@ -57,3 +57,20 @@ def test_create_note_sin_titulo(client):
 def test_delete_note(client):
     r = client.delete('/api/notes/1')
     assert r.status_code == 200
+
+
+def test_cors_no_autoriza_otros_origenes(client):
+    """SS-17 (CWE-942): un sitio externo no recibe permiso para leer la API."""
+    r = client.get('/api/notes', headers={'Origin': 'https://sitio-atacante.example'})
+    assert r.status_code == 200
+    assert 'Access-Control-Allow-Origin' not in r.headers
+
+
+def test_cabeceras_de_seguridad(client):
+    """SS-18 (CWE-693): la API envía nosniff y el resto de las cabeceras defensivas."""
+    for ruta in ('/api/notes', '/health', '/ruta-inexistente'):
+        r = client.get(ruta)
+        assert r.headers['X-Content-Type-Options'] == 'nosniff'
+        assert r.headers['Cache-Control'] == 'no-store'
+        assert r.headers['Cross-Origin-Resource-Policy'] == 'same-origin'
+        assert "frame-ancestors 'none'" in r.headers['Content-Security-Policy']
