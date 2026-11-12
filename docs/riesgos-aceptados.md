@@ -6,7 +6,6 @@ Hallazgos de Checkov y kube-linter sobre el manifiesto renderizado que no se cor
 |----|-------|----------|---------------|-----------------------|
 | RA-01 | CKV_K8S_43: la imagen debe usar digest | backend, frontend, postgres | El manifiesto se analiza en la Fase 2, antes de que la imagen exista en el registro, por lo que todavía no tiene digest. El backend se publica por digest recién en la Fase 4. | En la Fase 4 la imagen del backend se publica por digest, se firma con Cosign y la firma se verifica antes del despliegue (SS-03). La imagen base está fijada por digest en el Dockerfile. |
 | RA-02 | CKV_K8S_40: UID alto (mayor a 10000) | frontend (101), postgres (70) | Los UID vienen definidos por las imágenes oficiales nginx-unprivileged y postgres; cambiarlos exige reconstruir esas imágenes. | runAsNonRoot, readOnlyRootFilesystem, drop ALL y allowPrivilegeEscalation false (Issue #2). |
-| RA-03 | CKV_K8S_35: secretos como archivos | backend, postgres | La aplicación lee las credenciales de variables de entorno; montarlas como archivos requiere cambiar el código. | Las credenciales viven en un Secret de Kubernetes y no en el repositorio de la imagen. |
 | RA-05 | kube-linter no-anti-affinity | backend, frontend | El laboratorio usa un único nodo, donde la anti-afinidad entre réplicas no tiene efecto. | Réplicas múltiples y estrategia RollingUpdate con maxUnavailable 0. |
 
 ## Riesgos aceptados para el Security Gate
@@ -26,3 +25,4 @@ Excepciones que dejaron de ser necesarias porque el hallazgo se corrigió. La re
 | ID | Regla | Resolución |
 |----|-------|------------|
 | RA-04 | CKV2_K8S_6: Pods sin NetworkPolicy | SS-15: el chart define una NetworkPolicy por componente. PostgreSQL solo acepta conexiones del backend en el puerto 5432; backend y frontend solo reciben tráfico del Ingress Controller, del smoke test del pipeline y, en el caso del backend, del frontend y de Prometheus. |
+| RA-03 | CKV_K8S_35: secretos como variables de entorno | SS-16: la contraseña de PostgreSQL se monta como archivo de solo lectura desde el Secret (`/run/secrets/db/password`). El backend la lee con `DB_PASSWORD_FILE` y PostgreSQL con `POSTGRES_PASSWORD_FILE`. Además, la contraseña dejó de estar escrita en los values del chart: la genera Helm en la primera instalación y se conserva en el clúster. |

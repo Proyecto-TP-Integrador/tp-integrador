@@ -1,0 +1,84 @@
+{{- if .Values.networkPolicy.enabled }}
+# ── SS-15 (CWE-200): aislamiento de red de la Notes App ──────
+# Checkov CKV2_K8S_6. Sin NetworkPolicy, cualquier pod del clúster podía
+# conectarse directo a PostgreSQL en el puerto 5432. Cada política selecciona
+# los pods de un componente: a partir de ahí solo entra el tráfico listado
+# (k3s aplica las NetworkPolicy con su controlador kube-router).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-solo-backend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "devops-portfolio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress]
+  ingress:
+    # Solo los pods del backend llegan al puerto 5432
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-acceso-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "devops-portfolio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Ingress Controller y smoke test del pipeline (Fase 4)
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.networkPolicy.allowedNamespaces | nindent 18 }}
+        # Pods del mismo namespace: proxy /api del frontend y Prometheus (TP12C)
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  {{- toYaml .Values.networkPolicy.backendClients | nindent 18 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.backend.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-acceso-web
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "devops-portfolio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.networkPolicy.allowedNamespaces | nindent 18 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.frontend.port }}
+{{- end }}

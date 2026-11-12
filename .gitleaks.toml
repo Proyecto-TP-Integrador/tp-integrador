@@ -11,8 +11,8 @@ paths = [
   '''backend/tests/.*''',
   '''scripts/verificar.*\.sh'''
 ]
+# SS-16: se quitaron devops123 y dev-password de la lista. Eran contraseñas
+# reales del chart y la excepción ocultaba la credencial en lugar de corregirla.
 regexes = [
-  '''EXAMPLEKEY''',
-  '''devops123''',
-  '''dev-password'''
+  '''EXAMPLEKEY'''
 ]

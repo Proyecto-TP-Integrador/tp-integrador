@@ -33,13 +33,26 @@ def agregar_cabeceras_seguridad(response):
         response.headers.setdefault(cabecera, valor)
     return response
 
+def leer_password_db():
+    """SS-16 (CKV_K8S_35): la contraseña se lee de un archivo montado desde el
+    Secret de Kubernetes (DB_PASSWORD_FILE), no de una variable de entorno.
+    Una variable de entorno queda visible en `kubectl describe`, en /proc del
+    proceso, en volcados de error y en todos los procesos hijos. DB_PASSWORD se
+    mantiene solo para el contenedor efímero del DAST en el pipeline."""
+    ruta = os.getenv("DB_PASSWORD_FILE")
+    if ruta:
+        with open(ruta, encoding="utf-8") as archivo:
+            return archivo.read().strip()
+    return os.getenv("DB_PASSWORD", "")
+
+
 def get_conn():
     return psycopg2.connect(
         host=os.getenv("DB_HOST", "db"),
         port=os.getenv("DB_PORT", "5432"),
         dbname=os.getenv("DB_NAME", "notesdb"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", "postgres")
+        password=leer_password_db()
     )
 
 def init_db():

@@ -22,6 +22,11 @@ metadata:
     {{- include "devops-portfolio.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # El PVC es ReadWriteOnce y PostgreSQL bloquea su directorio de datos: el pod
+  # viejo se detiene antes de iniciar el nuevo (con RollingUpdate convivirían
+  # dos servidores sobre los mismos datos)
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres
@@ -45,10 +50,15 @@ spec:
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           ports:
             - containerPort: 5432
-          envFrom:
-            - secretRef:
-                name: postgres-secret
+          # SS-16 (CKV_K8S_35): la imagen oficial lee la contraseña del archivo
+          # indicado en POSTGRES_PASSWORD_FILE; el usuario y la base no son secretos
           env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.credentials.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.credentials.database | quote }}
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/db/password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           readinessProbe:
@@ -75,10 +85,20 @@ spec:
               mountPath: /var/run/postgresql
             - name: tmp
               mountPath: /tmp
+            - name: db-credentials
+              mountPath: /run/secrets/db
+              readOnly: true
       volumes:
         - name: postgres-storage
           persistentVolumeClaim:
             claimName: postgres-pvc
+        - name: db-credentials
+          secret:
+            secretName: postgres-secret
+            defaultMode: 0440
+            items:
+              - key: POSTGRES_PASSWORD
+                path: password
         - name: run
           emptyDir:
             medium: Memory

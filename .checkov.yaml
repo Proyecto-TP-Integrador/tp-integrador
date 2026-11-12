@@ -6,4 +6,3 @@ framework:
 skip-check:
   - CKV_K8S_43   # RA-01: imágenes fijadas por digest
   - CKV_K8S_40   # RA-02: UID alto en frontend (101) y PostgreSQL (70)
-  - CKV_K8S_35   # RA-03: secretos como variables de entorno

@@ -22,8 +22,6 @@ frontend:
 postgres:
   storage:
     size: 10Gi
-  credentials:
-    password: "super-secret-prod-password"
 
 ingress:
   host: devops-portfolio.com

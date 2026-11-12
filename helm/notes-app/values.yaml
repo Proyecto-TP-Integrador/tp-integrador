@@ -17,7 +17,10 @@ postgres:
   credentials:
     database: notesdb
     user: postgres
-    password: devops123    # sobreescribir en prod con --set
+    # SS-16 (CWE-798): sin contraseña en el repositorio. La genera el chart en
+    # la primera instalación y se conserva en el Secret del clúster; para
+    # rotarla: --set postgres.credentials.password=... (ver secret.yaml)
+    password: ""
   storage:
     size: 1Gi
   resources:
