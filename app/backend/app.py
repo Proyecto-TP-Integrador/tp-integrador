@@ -1,8 +1,10 @@
-from flask import Flask, jsonify, request
+from flask import Flask, Response, g, jsonify, request
 import datetime
 import os
+import time
 
 import psycopg2
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 # SS-17 (CWE-942): sin CORS. El frontend y la API se publican en el mismo
 # origen (Ingress: "/" al frontend y "/api" al backend), así que el navegador
@@ -32,6 +34,50 @@ def agregar_cabeceras_seguridad(response):
     for cabecera, valor in CABECERAS_SEGURIDAD.items():
         response.headers.setdefault(cabecera, valor)
     return response
+
+
+# ── Telemetría para Prometheus (TP12B, TP12C y Anexo B §5.2) ─────────────
+# endpoint usa la ruta declarada (por ejemplo /api/notes/<int:note_id>) y no la
+# URL recibida: un escaneo o fuzzing no crea una serie nueva por cada URL inventada.
+HTTP_REQUESTS = Counter(
+    "http_requests_total", "Requests HTTP atendidos por la API",
+    ["method", "endpoint", "status"],
+)
+HTTP_LATENCY = Histogram(
+    "http_request_duration_seconds", "Duración de los requests HTTP en segundos",
+    ["method", "endpoint"],
+)
+# TP12C: errores de conexión o de consulta contra PostgreSQL
+DB_ERRORS = Counter("app_db_errors_total", "Errores de conexión o consulta a PostgreSQL")
+
+
+@app.before_request
+def _inicio_request():
+    g.inicio = time.perf_counter()
+
+
+@app.after_request
+def _registrar_request(response):
+    endpoint = request.url_rule.rule if request.url_rule else "sin_ruta"
+    if endpoint != "/metrics":
+        duracion = time.perf_counter() - g.get("inicio", time.perf_counter())
+        HTTP_REQUESTS.labels(request.method, endpoint, str(response.status_code)).inc()
+        HTTP_LATENCY.labels(request.method, endpoint).observe(duracion)
+    return response
+
+
+@app.errorhandler(psycopg2.Error)
+def _error_base_datos(error):
+    # Se cuenta para la alerta PicoErroresConexionBaseDatos y se responde sin
+    # volcar el detalle de la excepción al cliente (CWE-209)
+    DB_ERRORS.inc()
+    app.logger.error("Error de base de datos: %s", error)
+    return jsonify({"error": "base de datos no disponible"}), 503
+
+
+@app.route("/metrics")
+def metrics():
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 def leer_password_db():
     """SS-16 (CKV_K8S_35): la contraseña se lee de un archivo montado desde el
@@ -76,8 +122,10 @@ def health():
         conn = get_conn()
         conn.close()
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {e}"
+    except psycopg2.Error as e:
+        DB_ERRORS.inc()
+        app.logger.error("Health check sin base de datos: %s", e)
+        db_status = "error"
     return jsonify({
         "status": "ok",
         "db": db_status,

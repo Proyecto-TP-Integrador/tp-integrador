@@ -1,0 +1,83 @@
+# ==============================================================================
+# TP12C — Reglas de alerta de ciberseguridad para la Notes App
+# Se cargan en Prometheus con el ConfigMap prometheus-rules (TP12C Paso 2):
+#   kubectl create configmap prometheus-rules \
+#     --from-file=alerts.yml=monitoring/prometheus-alerts-security.yml \
+#     -n devops-portfolio --dry-run=client -o yaml | kubectl apply -f -
+#
+# Adaptaciones a la Notes App:
+#   - La API expone http_requests_total (nombre del Anexo B §5.2) en lugar de
+#     app_requests_total.
+#   - La Notes App no tiene login (RA-07): la regla 3 vigila los accesos no
+#     permitidos que sí existen (401, 403 y 405, métodos no admitidos), que es
+#     lo que genera un escáner que prueba verbos y rutas sobre la API.
+# ==============================================================================
+groups:
+  - name: AlertasSeguridadNotesApp
+    rules:
+
+      # ========================================================================
+      # 1. Detección de Escaneos / Fuerza Bruta en Ingress (Errores HTTP 4xx/5xx)
+      # ========================================================================
+      - alert: IngressPicoErrores4xx5xx
+        expr: sum(rate(nginx_ingress_controller_requests{status=~"4..|5.."}[2m])) > 10
+        for: 1m
+        labels:
+          severity: critical
+          category: ciberseguridad
+        annotations:
+          summary: "Posible escaneo de vulnerabilidades o ataque de fuerza bruta"
+          description: "El NGINX Ingress Controller registra más de 10 peticiones fallidas (4xx/5xx) por segundo en los últimos 2 minutos (valor: {{ $value | printf \"%.1f\" }})."
+
+      # ========================================================================
+      # 2. Reinicio Frecuente de Pods (CrashLoopBackOff / Violación de Probes)
+      # ========================================================================
+      - alert: PodReiniciosFrecuentesSeguridad
+        expr: increase(kube_pod_container_status_restarts_total{namespace="devops-portfolio"}[5m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+          category: infraestructura
+        annotations:
+          summary: "Pod reiniciándose repetidamente en el clúster"
+          description: "El pod {{ $labels.pod }} en el contenedor {{ $labels.container }} se reinició más de 2 veces en 5 minutos, posiblemente por fallos de healthcheck o errores no controlados."
+
+      # ========================================================================
+      # 3. Intentos de acceso no permitido a la API (401 / 403 / 405)
+      # ========================================================================
+      - alert: InvasionIntentosAccesoNoPermitido
+        expr: sum(rate(http_requests_total{status=~"401|403|405"}[2m])) > 5
+        for: 30s
+        labels:
+          severity: critical
+          category: aplicacion
+        annotations:
+          summary: "Múltiples intentos de acceso no permitido a la API"
+          description: "La API responde más de 5 rechazos por segundo (401/403/405): alguien está probando rutas y métodos sobre la Notes App."
+
+      # ========================================================================
+      # 4. Anomalía / Inyección en Base de Datos Postgres
+      # ========================================================================
+      - alert: PicoErroresConexionBaseDatos
+        expr: sum(rate(app_db_errors_total[2m])) > 2
+        for: 30s
+        labels:
+          severity: critical
+          category: persistencia
+        annotations:
+          summary: "Pico anómalo de errores en la base de datos PostgreSQL"
+          description: "La API registra consultas fallidas o desconexiones repetidas contra la base de datos."
+
+      # ========================================================================
+      # 5. Anexo B §5.2: ráfaga atípica de errores 400 / 429 en la API
+      #    (fuzzing o DAST con OWASP ZAP). Pasa de Pending a Firing en 1 minuto.
+      # ========================================================================
+      - alert: RafagaErrores4xx
+        expr: sum(rate(http_requests_total{status=~"400|429"}[1m])) > 0.2
+        for: 1m
+        labels:
+          severity: warning
+          category: ciberseguridad
+        annotations:
+          summary: "Ráfaga de errores 400/429 en la API"
+          description: "La API responde {{ $value | printf \"%.2f\" }} errores 400/429 por segundo (umbral 0.2)."

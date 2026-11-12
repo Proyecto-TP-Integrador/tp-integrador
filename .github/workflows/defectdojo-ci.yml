@@ -225,7 +225,7 @@ jobs:
           # v2: p/owasp-top-ten (p/owasp-top-10 no existe en el registry de Semgrep)
           semgrep scan --config=p/owasp-top-ten --config=p/python --config=p/dockerfile --config=p/kubernetes \
             --no-git-ignore --json --output=reports-json/semgrep-results.json \
-            app .semgrep-tmp || true
+            app monitoring .semgrep-tmp || true
 
       # -------------------------------------------------------------
       # 2D. TRIVY CONTAINER, SCA E IaC

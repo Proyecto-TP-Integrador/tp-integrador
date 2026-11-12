@@ -37,4 +37,6 @@ USER 10001:10001
 
 EXPOSE 5000
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--worker-tmp-dir", "/dev/shm", "app:app"]
+# Un proceso con hilos: las métricas de prometheus_client viven en la memoria del
+# proceso, y con varios workers cada uno tendría su propio contador.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "--worker-tmp-dir", "/dev/shm", "app:app"]

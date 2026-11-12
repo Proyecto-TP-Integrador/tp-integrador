@@ -84,3 +84,34 @@ def test_password_db_desde_archivo(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PASSWORD_FILE", str(archivo))
     monkeypatch.setenv("DB_PASSWORD", "no-debe-usarse")
     assert flask_app.leer_password_db() == "clave-de-prueba"
+
+
+def test_metrics_registra_errores_4xx(client):
+    """Anexo B §5.2: http_requests_total cuenta los 4xx por ruta y código."""
+    from prometheus_client import REGISTRY
+    etiquetas = {"method": "POST", "endpoint": "/api/notes", "status": "400"}
+    antes = REGISTRY.get_sample_value("http_requests_total", etiquetas) or 0
+    client.post('/api/notes', json={})
+    assert REGISTRY.get_sample_value("http_requests_total", etiquetas) == antes + 1
+    r = client.get('/metrics')
+    assert r.status_code == 200
+    assert b'http_request_duration_seconds_bucket' in r.data
+
+
+def test_metrics_no_crea_series_por_url_inventada(client):
+    client.get('/no-existe-123')
+    r = client.get('/metrics')
+    assert b'endpoint="sin_ruta"' in r.data
+    assert b'no-existe-123' not in r.data
+
+
+def test_error_de_base_cuenta_y_responde_503(client):
+    """TP12C: app_db_errors_total sube y el cliente no ve el detalle del error."""
+    import psycopg2
+    from prometheus_client import REGISTRY
+    antes = REGISTRY.get_sample_value("app_db_errors_total") or 0
+    with patch('app.get_conn', side_effect=psycopg2.OperationalError("password authentication failed")):
+        r = client.get('/api/notes')
+    assert r.status_code == 503
+    assert b'password' not in r.data
+    assert REGISTRY.get_sample_value("app_db_errors_total") == antes + 1
