@@ -1,0 +1,3 @@
+# Contraseña de desarrollo que quedó en el historial de Git (commit 530d597,
+# helm/values-dev.yaml). Se rota en el clúster como parte de SS-16 y deja de dar acceso.
+530d597077de55ec43a9e4f4e9c7d3884ad2a7c6:helm/values-dev.yaml:hashicorp-tf-password:25

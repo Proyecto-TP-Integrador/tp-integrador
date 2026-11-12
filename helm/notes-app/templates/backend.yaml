@@ -65,6 +65,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: backend-config
+          env:
+            - name: DB_PASSWORD_FILE
+              value: /run/secrets/db/password
           readinessProbe:
             httpGet:
               path: /health
