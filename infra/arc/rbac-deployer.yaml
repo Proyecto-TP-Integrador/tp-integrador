@@ -1,0 +1,77 @@
+# ==============================================================================
+# Identidad del runner de GitHub Actions dentro del clúster (TP18D)
+# Mínimo privilegio: la ServiceAccount notes-deployer solo opera sobre el
+# namespace devops-portfolio. No puede crear namespaces ni leer los secretos de
+# DefectDojo ni de otros namespaces.
+#   kubectl apply -f infra/arc/rbac-deployer.yaml
+# ==============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notes-deployer
+  namespace: actions-runner-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: notes-deployer
+  namespace: devops-portfolio
+rules:
+  - apiGroups: [""]
+    resources: [secrets, configmaps, services, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  # kubectl exec usa WebSockets desde Kubernetes 1.30: necesita get y create
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [get, create]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # networkpolicies: el chart define el aislamiento de red de la Notes App (SS-15)
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: notes-deployer
+  namespace: devops-portfolio
+subjects:
+  - kind: ServiceAccount
+    name: notes-deployer
+    namespace: actions-runner-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: notes-deployer
+---
+# Helm necesita leer y etiquetar el namespace de la aplicación (y nada más)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: notes-deployer-namespace
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [devops-portfolio]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: notes-deployer-namespace
+subjects:
+  - kind: ServiceAccount
+    name: notes-deployer
+    namespace: actions-runner-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: notes-deployer-namespace

@@ -93,13 +93,57 @@ jobs:
         with:
           version: 'v3.13.0'
 
-      - name: Renderizar Helm Chart (Render First)
+      # -------------------------------------------------------------
+      # TP10B: Render First, Validate Second
+      # Las plantillas Go del chart no son YAML válido hasta que Helm las
+      # procesa. Se renderiza primero y se valida el YAML resultante, que es
+      # exactamente lo que recibe el API Server de Kubernetes.
+      # -------------------------------------------------------------
+      - name: "TP10B: Helm lint (estructura y metadata del chart)"
+        run: |
+          helm lint ./${{ env.CHART_DIR }} -f ${{ env.VALUES_PROD }}
+          helm lint ./${{ env.CHART_DIR }} -f ${{ env.VALUES_DEV }}
+
+      - name: "TP10B: Renderizar Helm Chart (Render First)"
         run: |
           helm template ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
             -f ${{ env.VALUES_PROD }} \
             --set backend.image.repository=${{ env.DOCKER_IMAGE }} \
             --set backend.image.tag=${{ github.sha }} > manifests-rendered-prod.yaml
+          helm template ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
+            -f ${{ env.VALUES_DEV }} > manifests-rendered-dev.yaml
           test -s manifests-rendered-prod.yaml
+          test -s manifests-rendered-dev.yaml
+
+      - name: "TP10B: Validar el YAML renderizado (sintaxis, linter y checksums)"
+        run: |
+          python3 - <<'PY'
+          import yaml
+          for archivo in ("manifests-rendered-prod.yaml", "manifests-rendered-dev.yaml"):
+              with open(archivo) as f:
+                  docs = [d for d in yaml.safe_load_all(f) if d]
+              print(f"[OK] {archivo}: YAML válido con {len(docs)} objetos de Kubernetes")
+              for d in docs:
+                  print(f"   - {d['kind']:24} -> {d['metadata']['name']}")
+          PY
+          # Linter estándar sobre el YAML ya procesado (sin falsos positivos por {{ }})
+          pipx run --spec yamllint==1.35.1 yamllint \
+            -d "{extends: relaxed, rules: {line-length: disable, trailing-spaces: disable}}" \
+            manifests-rendered-prod.yaml manifests-rendered-dev.yaml
+          # Las anotaciones checksum/* fuerzan el rolling update cuando cambian el
+          # ConfigMap o el Secret; sólo tienen valor real después de renderizar
+          for C in config secret; do
+            grep -Eq "checksum/$C: [a-f0-9]{64}" manifests-rendered-prod.yaml \
+              || { echo "::error::checksum/$C no se calculó en el render"; exit 1; }
+            echo "[OK] checksum/$C calculado (SHA256)"
+          done
+
+      - name: "TP10B: Publicar los manifiestos renderizados"
+        uses: actions/upload-artifact@v5
+        with:
+          name: manifiestos-k8s-renderizados
+          path: manifests-rendered-*.yaml
+          retention-days: 7
 
       - name: "Andon Cord: Checkov sobre el manifiesto renderizado"
         run: |
@@ -451,6 +495,22 @@ jobs:
         uses: azure/setup-kubectl@v4
         with:
           version: 'v1.35.0'
+
+      # TP10B [b]: el API Server valida el manifiesto renderizado con los mismos
+      # valores del despliegue, sin modificar el clúster (dry-run del lado servidor)
+      - name: "TP10B: Validación del manifiesto contra el API Server (dry-run)"
+        run: |
+          set -euo pipefail
+          helm template ${{ env.HELM_RELEASE_NAME }} ./${{ env.CHART_DIR }} \
+            -n ${{ env.K8S_NAMESPACE }} \
+            -f ${{ env.VALUES_DEV }} \
+            --set ingress.host=${{ env.INGRESS_HOST }} \
+            --set backend.image.repository=${{ env.DOCKER_IMAGE }} \
+            --set backend.image.tag=${{ github.sha }}@${{ needs.deploy-k8s-helm.outputs.backend_digest }} \
+            --set frontend.image.repository=${{ env.FRONTEND_IMAGE }} \
+            --set frontend.image.tag=${{ github.sha }}@${{ needs.deploy-k8s-helm.outputs.frontend_digest }} \
+            > manifests-deploy.yaml
+          kubectl apply --dry-run=server -f manifests-deploy.yaml
 
       # Imágenes por digest: el tag SHA es informativo, Kubernetes descarga
       # exactamente el digest firmado y verificado en la Fase 4A

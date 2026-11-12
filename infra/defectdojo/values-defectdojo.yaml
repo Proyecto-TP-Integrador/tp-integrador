@@ -1,0 +1,69 @@
+# ==============================================================================
+# OWASP DefectDojo en Kubernetes (k3d) vía Helm — TP18B / TP18E
+# Chart oficial defectdojo/defectdojo 1.9.65 (DefectDojo 3.5.0)
+#
+# Instalación:
+#   helm repo add defectdojo https://charts.defectdojo.com && helm repo update
+#   helm upgrade --install defectdojo defectdojo/defectdojo -n defectdojo \
+#     --create-namespace --version 1.9.65 -f infra/defectdojo/values-defectdojo.yaml
+#
+# Ninguna contraseña se escribe en este archivo: el chart genera las del
+# administrador, PostgreSQL y Valkey (Redis) en Secrets del namespace.
+# ==============================================================================
+
+host: defectdojo.local
+# Nombres internos del clúster: el runner de GitHub Actions (ARC) envía los
+# reportes por la red privada de Kubernetes, sin salir del clúster (TP18E §1)
+alternativeHosts:
+  - defectdojo-django.defectdojo.svc
+  - defectdojo-django.defectdojo.svc.cluster.local
+
+createSecret: true
+createValkeySecret: true
+createPostgresqlSecret: true
+
+django:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    activateTLS: false            # TP18E §4.5: HTTP plano permitido en k3d local
+    annotations:
+      # TP18E §4.1 [ULTRA CRÍTICO]: reportes grandes (ZAP, Trivy, Checkov) sin
+      # HTTP 413 Payload Too Large ni HTTP 504 Gateway Timeout
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  uwsgi:
+    appSettings:
+      processes: 2
+      threads: 4
+    # Sin límite de memoria el pod se reiniciaba por OOMKilled (retrospectiva Fase 2)
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: 2000m, memory: 1Gi}
+  # TP18E §4.3 [CRÍTICO]: evidencias y reportes originales en /app/media
+  # persisten aunque se recree el pod de Django
+  mediaPersistentVolume:
+    enabled: true
+    type: pvc
+    persistentVolumeClaim:
+      create: true
+      size: 2Gi
+      accessModes:
+        - ReadWriteOnce           # local-path de k3d solo soporta RWO
+      storageClassName: local-path
+
+# TP18E §4.2 [ULTRA CRÍTICO]: la base de DefectDojo (usuarios, API Key v2,
+# productos e historial de hallazgos) vive en un PVC de 8Gi (valor por defecto
+# del subchart de PostgreSQL, clase local-path de k3d) y sobrevive a los
+# reinicios. El tamaño y la clase no se escriben acá: el volumeClaimTemplate de
+# un StatefulSet no se puede modificar después de creado.
+postgresql:
+  primary:
+    persistence:
+      enabled: true
+
+# TP18F: Threagile no trae CWE ni archivo; se deduplica por el identificador
+# del riesgo (synthetic_id) en lugar del algoritmo por defecto
+extraConfigs:
+  DD_DEDUPLICATION_ALGORITHM_PER_PARSER: '{"Threagile risks report":"unique_id_from_tool"}'
