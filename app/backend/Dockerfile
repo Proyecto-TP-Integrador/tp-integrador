@@ -17,6 +17,13 @@ WORKDIR /app
 # Copiar solo las dependencias instaladas desde el builder
 COPY --from=builder /install /usr/local
 
+# Parches de Debian publicados después de la imagen base (Trivy: apt, libapt-pkg7.0, zlib1g).
+# Va antes de quitar los bits setuid, para que ningún paquete actualizado los vuelva a traer.
+# hadolint ignore=DL3005
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
+
 # Usuario sin privilegios con UID/GID fijos y eliminación de bits setuid/setgid (Issue #1)
 RUN groupadd --gid 10001 appuser \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin appuser \
