@@ -1,12 +1,15 @@
 from flask import Flask, jsonify, request
-from flask_cors import CORS
 import datetime
 import os
 
 import psycopg2
 
+# SS-17 (CWE-942): sin CORS. El frontend y la API se publican en el mismo
+# origen (Ingress: "/" al frontend y "/api" al backend), así que el navegador
+# no necesita permisos de origen cruzado. Antes, CORS(app) respondía
+# Access-Control-Allow-Origin: * (o reflejaba cualquier Origin) y cualquier
+# sitio externo podía leer las notas desde el navegador de la víctima.
 app = Flask(__name__)
-CORS(app)
 
 def get_conn():
     return psycopg2.connect(

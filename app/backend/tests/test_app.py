@@ -57,3 +57,10 @@ def test_create_note_sin_titulo(client):
 def test_delete_note(client):
     r = client.delete('/api/notes/1')
     assert r.status_code == 200
+
+
+def test_cors_no_autoriza_otros_origenes(client):
+    """SS-17 (CWE-942): un sitio externo no recibe permiso para leer la API."""
+    r = client.get('/api/notes', headers={'Origin': 'https://sitio-atacante.example'})
+    assert r.status_code == 200
+    assert 'Access-Control-Allow-Origin' not in r.headers
