@@ -12,6 +12,7 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 | `helm/values-dev.yaml`, `helm/values-prod.yaml` | Valores por entorno |
 | `threat-model/threagile.yaml` | Modelo de amenazas (Threagile) |
 | `infra/` | DefectDojo y runner de GitHub Actions dentro de k3d (TP18B, TP18D, TP18E) |
+| `monitoring/` | Prometheus, Grafana, Node Exporter, cAdvisor, kube-state-metrics y alertas de seguridad (TP12B, TP12C) |
 | `scripts/` | Importación a DefectDojo y automatización del tablero |
 | `docs/` | Análisis de brechas OWASP ASVS v5.0.0 y documentación del proyecto |
 | `.github/` | Workflows de CI/CD y plantilla de Issues |
