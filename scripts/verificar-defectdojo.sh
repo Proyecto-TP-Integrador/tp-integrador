@@ -2,7 +2,7 @@
 set -uo pipefail
 
 echo "=========================================================="
-echo "  VERIFICACIÓN Y CARGA LOCAL A DEFECTDOJO API v2"
+echo "  CARGA DE REPORTES A DEFECTDOJO API v2 (reimport-scan)"
 echo "=========================================================="
 echo ""
 
@@ -23,6 +23,16 @@ trap 'rm -f "$RESP"' EXIT
 OK=0
 FAIL=0
 
+# TP18F: /api/v2/reimport-scan/ en lugar de /api/v2/import-scan/.
+# import-scan crea un Test nuevo en cada ejecución del pipeline, así que el
+# mismo hallazgo se acumula N veces. reimport-scan busca el Test existente del
+# Engagement con el mismo test_title y scan_type y lo actualiza:
+#   - un hallazgo que sigue presente se conserva (con su estado y su historial);
+#   - un hallazgo nuevo se agrega;
+#   - un hallazgo que ya no aparece en el reporte pasa a Mitigated.
+# Si el Test todavía no existe, auto_create_context lo crea (y también el
+# Producto y el Engagement). El engagement_name es fijo: un nombre con fecha
+# haría que cada ejecución fuera una campaña nueva sin nada con qué comparar.
 import_scan() {
   local SCAN_TYPE="$1" FILE_PATH="$2" TEST_TITLE="$3"
   if [ ! -s "$FILE_PATH" ]; then
@@ -31,12 +41,13 @@ import_scan() {
   fi
   echo "  [+] Enviando $SCAN_TYPE ($FILE_PATH)..."
   # v2: se separa el cuerpo de la respuesta del código HTTP
-  HTTP_CODE=$(curl -s -o "$RESP" -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+  HTTP_CODE=$(curl -s -o "$RESP" -w "%{http_code}" -X POST "$DEFECTDOJO_URL/api/v2/reimport-scan/" \
     -H "Authorization: Token $API_KEY" \
     -F "product_type_name=$PRODUCT_TYPE_NAME" \
     -F "product_name=$PRODUCT_NAME" \
     -F "engagement_name=$ENGAGEMENT_NAME" \
     -F "auto_create_context=true" \
+    -F "deduplication_on_engagement=true" \
     -F "scan_type=$SCAN_TYPE" \
     -F "test_title=$TEST_TITLE" \
     -F "service=$TEST_TITLE" \
@@ -44,7 +55,7 @@ import_scan() {
     -F "file=@$FILE_PATH")
   # v2: el éxito se valida por HTTP 201, no por la palabra "scan_type" en la respuesta
   if [ "$HTTP_CODE" = "201" ]; then
-    echo "      [OK] HTTP 201 | test_id=$(jq -r '.test_id' "$RESP") | findings=$(jq -r '.statistics.after.total.total // "n/d"' "$RESP")"
+    echo "      [OK] HTTP 201 | test_id=$(jq -r '.test_id // .test' "$RESP") | findings=$(jq -r '.statistics.after.total.total // "n/d"' "$RESP")"
     OK=$((OK+1))
   else
     echo "      [FAIL] HTTP $HTTP_CODE: $(head -c 300 "$RESP")"
@@ -52,10 +63,10 @@ import_scan() {
   fi
 }
 
-# Al crear un hallazgo activo, DefectDojo limpia is_mitigated y false_p, así que
-# los estados mitigated y false-positive del risk_tracking de Threagile se pierden
-# en la importación (accepted sí se conserva). Se aplican después por la API,
-# buscando cada riesgo por su synthetic_id exacto en todo el producto.
+# Al importar, DefectDojo no aplica los estados mitigated y false-positive del
+# risk_tracking de Threagile, y reimport-scan reactiva un hallazgo mitigado si
+# vuelve a aparecer en el reporte (accepted sí se conserva). Se aplican después
+# por la API, buscando cada riesgo por su synthetic_id exacto en todo el producto.
 sync_threagile_status() {
   local FILE="$1"
   [ -s "$FILE" ] || return 0

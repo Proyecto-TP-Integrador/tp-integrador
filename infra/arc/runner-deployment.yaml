@@ -1,0 +1,22 @@
+# ==============================================================================
+# Runner self-hosted de GitHub Actions dentro de k3d con ARC v0.27.6 (TP18D)
+# Efímero: cada job corre en un pod nuevo que se destruye al terminar.
+# Requisitos: cert-manager, ARC y el Secret controller-manager con el token.
+#   kubectl apply -f infra/arc/runner-deployment.yaml
+# ==============================================================================
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: notesapp-runnerdeploy
+  namespace: actions-runner-system
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: Proyecto-TP-Integrador/tp-integrador
+      labels: [pif]
+      ephemeral: true
+      serviceAccountName: notes-deployer
+      resources:
+        requests: {cpu: "200m", memory: "512Mi"}
+        limits: {cpu: "2000m", memory: "2Gi"}

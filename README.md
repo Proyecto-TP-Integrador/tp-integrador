@@ -11,6 +11,7 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 | `helm/notes-app/` | Chart de Helm de la aplicación |
 | `helm/values-dev.yaml`, `helm/values-prod.yaml` | Valores por entorno |
 | `threat-model/threagile.yaml` | Modelo de amenazas (Threagile) |
+| `infra/` | DefectDojo y runner de GitHub Actions dentro de k3d (TP18B, TP18D, TP18E) |
 | `scripts/` | Importación a DefectDojo y automatización del tablero |
 | `docs/` | Análisis de brechas OWASP ASVS v5.0.0 y documentación del proyecto |
 | `.github/` | Workflows de CI/CD y plantilla de Issues |
@@ -20,8 +21,8 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 | Fase | Herramientas | Función |
 |------|--------------|---------|
 | 1. Build & Package | Hadolint, Docker Buildx | Valida el Dockerfile y compila la imagen inmutable del backend |
-| 2. Auditorías | Checkov, kube-linter, OWASP ZAP, Threagile, Semgrep, Trivy, Gitleaks | IaC sobre el manifiesto renderizado (Render First), DAST, modelado de amenazas, SAST, SCA y secretos |
-| 3. Vulnerability Management | OWASP DefectDojo (API v2) | Centraliza y deduplica los hallazgos (runner self-hosted) |
+| 2. Auditorías | Helm lint, yamllint, Checkov, kube-linter, OWASP ZAP, Threagile, Semgrep, Trivy, Gitleaks | Render First, Validate Second (TP10B), IaC sobre el manifiesto renderizado, DAST, modelado de amenazas, SAST, SCA y secretos |
+| 3. Vulnerability Management | OWASP DefectDojo (API v2) | Centraliza los hallazgos con `reimport-scan`: un Test por herramienta que se actualiza en cada ejecución, sin duplicados (TP18F) |
 | 4. Release & Deploy | Docker Hub, Syft, Cosign, Helm | Publica la imagen por digest, genera el SBOM, la firma, verifica la firma y despliega en Kubernetes |
 
 ## Gobernanza
@@ -40,7 +41,9 @@ El trabajo se gestionó en el tablero de GitHub Projects v2 [PIF DevSecOps - Not
 
 ```bash
 helm template mi-app helm/notes-app -f helm/values-prod.yaml > manifests-rendered-prod.yaml
-DEFECTDOJO_URL="http://localhost:8080" ./scripts/verificar-defectdojo.sh
+bash scripts/verificar.sh                        # TP10B: render, validación y estado del despliegue
+bash scripts/configurar-dedup-defectdojo.sh      # TP18F: deduplicación en DefectDojo
+DEFECTDOJO_URL="http://defectdojo.local:18080" ./scripts/verificar-defectdojo.sh
 ```
 
 El token de DefectDojo se toma de `DEFECTDOJO_API_KEY` o de `~/.defectdojo-token` y nunca se versiona en el repositorio.
