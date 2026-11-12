@@ -11,6 +11,28 @@ import psycopg2
 # sitio externo podía leer las notas desde el navegador de la víctima.
 app = Flask(__name__)
 
+# SS-18 (CWE-693): cabeceras de seguridad en todas las respuestas de la API.
+# OWASP ZAP reportaba "X-Content-Type-Options Header Missing": sin nosniff el
+# navegador puede interpretar una respuesta JSON como HTML o script.
+CABECERAS_SEGURIDAD = {
+    "X-Content-Type-Options": "nosniff",
+    # La API solo devuelve datos: no carga recursos ni se muestra en un iframe
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",
+    # Las notas no quedan guardadas en cachés del navegador ni de proxies
+    "Cache-Control": "no-store",
+    # Aislamiento frente a lecturas de otros orígenes (Spectre)
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+@app.after_request
+def agregar_cabeceras_seguridad(response):
+    for cabecera, valor in CABECERAS_SEGURIDAD.items():
+        response.headers.setdefault(cabecera, valor)
+    return response
+
 def get_conn():
     return psycopg2.connect(
         host=os.getenv("DB_HOST", "db"),
