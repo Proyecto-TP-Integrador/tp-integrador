@@ -84,6 +84,18 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
 
+# ── Aislamiento de red (SS-15, CWE-200) ───────────────────
+networkPolicy:
+  enabled: true
+  # Namespaces que pueden llegar al backend y al frontend
+  allowedNamespaces:
+    - ingress-nginx           # NGINX Ingress Controller
+    - actions-runner-system   # smoke test del pipeline (Fase 4)
+  # Pods del namespace de la app (label "app") que pueden consultar el backend
+  backendClients:
+    - frontend                # proxy /api del Nginx del frontend
+    - prometheus              # scraping de /metrics (TP12C)
+
 # ── Monitoreo (opcional) ──────────────────────────────────
 monitoring:
   enabled: false
