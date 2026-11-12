@@ -30,6 +30,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        # SS-16: el archivo del Secret queda con el grupo 10001 (lectura de la app)
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -58,20 +60,11 @@ spec:
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.backend.port }}
+          # SS-16 (CKV_K8S_35): la contraseña ya no se inyecta como variable de
+          # entorno; la app la lee del archivo /run/secrets/db/password
           envFrom:
             - configMapRef:
                 name: backend-config
-          env:
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_PASSWORD
           readinessProbe:
             httpGet:
               path: /health
@@ -94,11 +87,22 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: db-credentials
+              mountPath: /run/secrets/db
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
             medium: Memory
             sizeLimit: 16Mi
+        # Solo la clave POSTGRES_PASSWORD, como archivo de lectura para el grupo
+        - name: db-credentials
+          secret:
+            secretName: postgres-secret
+            defaultMode: 0440
+            items:
+              - key: POSTGRES_PASSWORD
+                path: password
 ---
 # ── HPA (opcional, si autoscaling.enabled=true) ───────────
 {{- if .Values.backend.autoscaling.enabled }}

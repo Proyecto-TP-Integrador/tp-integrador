@@ -167,7 +167,7 @@ jobs:
             -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=notesdb postgres:16-alpine
           docker run -d --name notes-backend --network zapnet -p 5000:5000 \
             --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
-            -e DB_HOST=db ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+            -e DB_HOST=db -e DB_PASSWORD=postgres ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           timeout 120 bash -c 'until curl -sf http://localhost:5000/health | grep -q connected; do sleep 3; done'
           curl -s -X POST -H "Content-Type: application/json" \
             -d '{"title":"PIF","content":"seed para ZAP"}' http://localhost:5000/api/notes
@@ -537,7 +537,10 @@ jobs:
           UID_APP=$(kubectl -n $NS exec deploy/backend -c backend -- id -u)
           echo "UID del proceso del backend: $UID_APP"
           test "$UID_APP" = "10001"
-          curl -sf "http://backend-service.$NS.svc:5000/health"; echo
+          # La API responde y además llega a PostgreSQL (credencial leída del archivo
+          # del Secret y tráfico permitido por la NetworkPolicy)
+          curl -sf "http://backend-service.$NS.svc:5000/health" | tee health.json; echo
+          grep -q '"connected"' health.json
           curl -sf -o /dev/null -w "Frontend: HTTP %{http_code}\n" "http://frontend-service.$NS.svc/"
           curl -sf -H "Host: ${{ env.INGRESS_HOST }}" -o /dev/null -w "Ingress /api/notes: HTTP %{http_code}\n" \
             "http://ingress-nginx-controller.ingress-nginx.svc/api/notes"

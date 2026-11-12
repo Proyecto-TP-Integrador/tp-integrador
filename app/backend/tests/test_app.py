@@ -74,3 +74,13 @@ def test_cabeceras_de_seguridad(client):
         assert r.headers['Cache-Control'] == 'no-store'
         assert r.headers['Cross-Origin-Resource-Policy'] == 'same-origin'
         assert "frame-ancestors 'none'" in r.headers['Content-Security-Policy']
+
+
+def test_password_db_desde_archivo(tmp_path, monkeypatch):
+    """SS-16 (CKV_K8S_35): la contraseña se toma del archivo del Secret montado."""
+    import app as flask_app
+    archivo = tmp_path / "password"
+    archivo.write_text("clave-de-prueba\n")
+    monkeypatch.setenv("DB_PASSWORD_FILE", str(archivo))
+    monkeypatch.setenv("DB_PASSWORD", "no-debe-usarse")
+    assert flask_app.leer_password_db() == "clave-de-prueba"

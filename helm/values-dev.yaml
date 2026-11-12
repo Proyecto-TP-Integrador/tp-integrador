@@ -20,9 +20,5 @@ frontend:
       memory: "32Mi"
       cpu: "25m"
 
-postgres:
-  credentials:
-    password: "dev-password"
-
 ingress:
   host: devops-portfolio.dev
