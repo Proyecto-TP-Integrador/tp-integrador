@@ -4,8 +4,11 @@
 #   - IngressPicoErrores4xx5xx           escaneo de rutas inexistentes (404)
 #   - InvasionIntentosAccesoNoPermitido  métodos no admitidos sobre la API (405)
 #   - RafagaErrores4xx (Anexo B §5.2)    payloads inválidos (400)
-# Con SIMULAR_DB=1 además detiene PostgreSQL 90 segundos para disparar
-# PicoErroresConexionBaseDatos (lo vuelve a levantar al terminar).
+# Con SIMULAR_DB=1 además detiene PostgreSQL 90 segundos (lo vuelve a levantar
+# al terminar): la API responde 503 y suma app_db_errors_total. Un solo flujo
+# secuencial no siempre alcanza el umbral de PicoErroresConexionBaseDatos
+# (2 errores/s); esa alerta se verificó con la contraseña de la base alterada
+# y varios flujos de tráfico en paralelo.
 # Uso: bash scripts/generar-alertas-seguridad.sh
 set -uo pipefail
 

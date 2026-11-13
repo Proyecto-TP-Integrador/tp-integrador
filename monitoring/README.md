@@ -55,7 +55,7 @@ Prometheus queda en `http://prometheus.local:18080` y Grafana en `http://grafana
 
 ```bash
 bash scripts/generar-alertas-seguridad.sh            # 3 minutos de tráfico anómalo
-SIMULAR_DB=1 bash scripts/generar-alertas-seguridad.sh   # además, 90 s sin PostgreSQL
+SIMULAR_DB=1 bash scripts/generar-alertas-seguridad.sh   # además, 90 s sin PostgreSQL (errores 503 de base de datos)
 ```
 
 En **Status → Targets** de Prometheus, los jobs `kubernetes-pods`, `node-exporter`, `cadvisor`, `ingress-nginx` y `kube-state-metrics` deben estar en `UP`. En **Alerts**, las reglas pasan de *Inactive* a *Pending* y, al cumplirse el `for`, a *Firing*.

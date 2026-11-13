@@ -578,9 +578,9 @@ risk_tracking:
   missing-hardening@github-actions-pipeline:
     status: mitigated
     justification: >-
-      Actions de terceros fijadas por SHA, permisos mínimos del GITHUB_TOKEN,
-      quality gates bloqueantes (Hadolint, Checkov, kube-linter, AS-02 y
-      Cosign) y runner self-hosted efímero dentro del clúster (ARC).
+      Permisos mínimos del GITHUB_TOKEN (contents: read), Trivy fijado por SHA,
+      quality gates bloqueantes (Checkov, kube-linter, AS-02, Trivy sobre el
+      frontend y Security Gate) y runner self-hosted efímero dentro del clúster (ARC).
     ticket: PIF-TM-07
     date: 2026-11-03
     checked_by: Equipo DevSecOps
