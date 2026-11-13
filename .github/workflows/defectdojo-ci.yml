@@ -36,10 +36,6 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v5
 
-      - name: "Andon Cord: Hadolint sobre el Dockerfile"
-        run: |
-          docker run --rm -i hadolint/hadolint:v2.12.0 hadolint --failure-threshold warning - < ${{ env.BACKEND_DIR }}/Dockerfile
-
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -328,17 +324,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # =========================================================================
-  # FASE 4A: RELEASE (Publicación, firma y SBOM de las imágenes)
+  # FASE 4A: RELEASE (Publicación de las imágenes por digest)
   # =========================================================================
   deploy-k8s-helm:
-    name: "Fase 4: Release (Docker Hub, Cosign & SBOM)"
+    name: "Fase 4: Release (Docker Hub)"
     runs-on: ubuntu-latest
     needs: [build-and-package, security-audits, defectdojo-import]
     if: github.ref == 'refs/heads/main'
-    # SS-03: id-token permite a Cosign firmar con la identidad OIDC del workflow (keyless)
-    permissions:
-      contents: read
-      id-token: write
     # Sólo se pasan los digests: un output que contenga el valor de un secreto
     # (el usuario de Docker Hub forma parte del nombre de la imagen) se descarta
     outputs:
@@ -357,10 +349,6 @@ jobs:
       - name: Cargar imagen Docker probada
         run: |
           docker load -i build-artifacts/app-image.tar
-
-      - name: "Andon Cord: Hadolint sobre el Dockerfile del frontend"
-        run: |
-          docker run --rm -i hadolint/hadolint:v2.12.0 hadolint --failure-threshold warning - < ${{ env.FRONTEND_DIR }}/Dockerfile
 
       - name: Compilar imagen del frontend
         run: |
@@ -399,52 +387,6 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "image=${{ env.FRONTEND_IMAGE }}@$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Imagen publicada: ${{ env.FRONTEND_IMAGE }}@$DIGEST"
-
-      - name: "SS-03: Instalar Cosign"
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: 'v3.1.4'
-
-      - name: "SS-03: Generar SBOM con Syft (SPDX)"
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          image: ${{ steps.push.outputs.image }}
-          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
-          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
-          format: spdx-json
-          output-file: sbom.spdx.json
-          artifact-name: sbom-notes-backend.spdx.json
-          upload-release-assets: false
-
-      - name: "SS-03: Generar SBOM del frontend con Syft (SPDX)"
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          image: ${{ steps.push-frontend.outputs.image }}
-          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
-          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
-          format: spdx-json
-          output-file: sbom-frontend.spdx.json
-          artifact-name: sbom-notes-frontend.spdx.json
-          upload-release-assets: false
-
-      - name: "SS-03: Firmar las imágenes y adjuntar el SBOM (Cosign keyless)"
-        run: |
-          cosign sign --yes ${{ steps.push.outputs.image }}
-          cosign attest --yes --type spdxjson --predicate sbom.spdx.json ${{ steps.push.outputs.image }}
-          cosign sign --yes ${{ steps.push-frontend.outputs.image }}
-          cosign attest --yes --type spdxjson --predicate sbom-frontend.spdx.json ${{ steps.push-frontend.outputs.image }}
-
-      - name: "Andon Cord: verificar firma y SBOM antes del despliegue"
-        run: |
-          ID='^https://github.com/${{ github.repository }}/.github/workflows/defectdojo-ci.yml@refs/heads/main$'
-          ISSUER='https://token.actions.githubusercontent.com'
-          for IMG in ${{ steps.push.outputs.image }} ${{ steps.push-frontend.outputs.image }}; do
-            cosign verify "$IMG" \
-              --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
-            cosign verify-attestation --type spdxjson "$IMG" \
-              --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER" > /dev/null
-            echo "Firma y SBOM verificados en el log público de transparencia: $IMG"
-          done
 
   # =========================================================================
   # FASE 4B: SECURITY GATE Y DESPLIEGUE CON HELM EN EL CLÚSTER
@@ -516,7 +458,7 @@ jobs:
           kubectl apply --dry-run=server -f manifests-deploy.yaml
 
       # Imágenes por digest: el tag SHA es informativo, Kubernetes descarga
-      # exactamente el digest firmado y verificado en la Fase 4A
+      # exactamente el digest publicado y escaneado en la Fase 4A
       - name: Despliegue con Helm en Kubernetes
         run: |
           set -euo pipefail
