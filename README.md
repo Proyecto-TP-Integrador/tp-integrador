@@ -21,10 +21,10 @@ Portfolio de la materia Desarrollo, Seguridad y Operaciones: una aplicación de 
 
 | Fase | Herramientas | Función |
 |------|--------------|---------|
-| 1. Build & Package | Hadolint, Docker Buildx | Valida el Dockerfile y compila la imagen inmutable del backend |
+| 1. Build & Package | Docker Buildx | Compila la imagen inmutable del backend |
 | 2. Auditorías | Helm lint, yamllint, Checkov, kube-linter, OWASP ZAP, Threagile, Semgrep, Trivy, Gitleaks | Render First, Validate Second (TP10B), IaC sobre el manifiesto renderizado, DAST, modelado de amenazas, SAST, SCA y secretos |
 | 3. Vulnerability Management | OWASP DefectDojo (API v2) | Centraliza los hallazgos con `reimport-scan`: un Test por herramienta que se actualiza en cada ejecución, sin duplicados (TP18F) |
-| 4. Release & Deploy | Docker Hub, Syft, Cosign, Helm | Publica la imagen por digest, genera el SBOM, la firma, verifica la firma y despliega en Kubernetes |
+| 4. Release & Deploy | Docker Hub, Trivy, Helm, DefectDojo | Publica las imágenes por digest, aplica el Security Gate y despliega en Kubernetes |
 
 ## Gobernanza
 
@@ -37,6 +37,8 @@ El trabajo se gestionó en el tablero de GitHub Projects v2 [PIF DevSecOps - Not
 | DEV | Aplicación base | Chart de Helm y modelo de amenazas | Pipeline base y análisis de brechas ASVS |
 | SEC | Hadolint | Checkov, kube-linter y prueba AS-02 | Syft y Cosign |
 | OPS | Dockerfile rootless | securityContext y Nginx sin root | Correcciones de Checkov, riesgos aceptados y mejora continua |
+
+Por indicación de la cátedra, la entrega final se limita a dos herramientas del Top 5: **Checkov** y **Kube-linter**, que analizan el manifiesto renderizado y tienen cada una un hallazgo remediado con su historia de usuario (#13 y #21). Hadolint y Syft + Cosign se usaron en iteraciones anteriores y se retiraron del pipeline en la iteración 4.
 
 ## Uso local
 
