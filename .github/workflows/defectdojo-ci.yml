@@ -155,6 +155,9 @@ jobs:
         run: |
           curl -sSfL https://github.com/stackrox/kube-linter/releases/download/v0.8.3/kube-linter-linux.tar.gz \
             | tar -xz -C /tmp kube-linter
+          # Reporte JSON para DefectDojo (Test "KubeLinter IaC"); el gate es la línea siguiente
+          /tmp/kube-linter lint manifests-rendered-prod.yaml --config .kube-linter.yaml --format json \
+            | jq '.Reports //= []' > reports-json/kubelinter-results.json || true
           /tmp/kube-linter lint manifests-rendered-prod.yaml --config .kube-linter.yaml
 
       # -------------------------------------------------------------
