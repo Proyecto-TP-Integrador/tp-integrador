@@ -42,13 +42,6 @@ spec:
             - sh
             - -c
             - until nc -z postgres-service 5432; do echo "Esperando DB..."; sleep 2; done
-          resources:
-            requests:
-              memory: "16Mi"
-              cpu: "10m"
-            limits:
-              memory: "32Mi"
-              cpu: "50m"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
